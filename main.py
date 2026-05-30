@@ -1,5 +1,6 @@
 import pygame
 import math
+import random
 
 pygame.init()
 
@@ -24,9 +25,17 @@ LIGHT_GRAY = (170, 170, 170)
 DARK_GRAY = (45, 45, 45)
 PURPLE = (160, 80, 255)
 BROWN = (130, 80, 35)
+
 FLAG_RED = (255, 60, 60)
 FLAG_LIGHT = (255, 150, 150)
 FLAG_DARK = (170, 30, 30)
+
+SPEAR_COLOR = (80, 220, 255)
+SPEAR_TIP = (230, 230, 255)
+SPEAR_SPLASH = (60, 130, 180)
+
+MONSTER_COLOR = (210, 60, 80)
+MONSTER_OUTLINE = (255, 120, 120)
 
 font = pygame.font.SysFont(None, 30)
 small_font = pygame.font.SysFont(None, 24)
@@ -36,10 +45,6 @@ player = pygame.Rect(100, 100, 40, 40)
 player_speed = 5
 player_direction = pygame.Vector2(0, 1)
 player_hp = 100
-
-enemy = pygame.Rect(WIDTH - 300, HEIGHT // 2, 40, 40)
-enemy_hp = 100
-enemy_alive = True
 
 weapons = [
     {
@@ -68,6 +73,18 @@ weapons = [
         "size": 48,
         "color": FLAG_RED,
         "cooldown": 20
+    },
+    {
+        "name": "Spear",
+        "type": "thrown_spear",
+        "damage": 10,
+        "splash_damage": 3,
+        "splash_chance": 36,
+        "splash_range": 162,
+        "speed": 13,
+        "size": 12,
+        "color": SPEAR_COLOR,
+        "cooldown": 45
     }
 ]
 
@@ -79,6 +96,12 @@ bullets = []
 bullet_speed = 9
 bullet_size = 10
 shoot_timer = 0
+
+spears = []
+spear_splash_timer = 0
+spear_splash_pos = None
+last_spear_splash = False
+last_spear_splash_damage = 0
 
 attacking = False
 attack_timer = 0
@@ -94,9 +117,12 @@ flag_attack_direction = pygame.Vector2(0, 1)
 flag_has_hit_enemy = False
 flag_attack_polygon = []
 
-touch_timer = 0
-touch_damage = 10
-touch_cooldown = 60
+monsters = []
+monster_speed = 2.2
+monster_touch_damage = 10
+monster_touch_cooldown = 60
+spawn_static_monster = False
+freeze_all_monsters = False
 
 dev_panel_open = True
 player_invincible = False
@@ -122,6 +148,94 @@ def rotate(vec, angle):
         vec.x * cos_a - vec.y * sin_a,
         vec.x * sin_a + vec.y * cos_a
     )
+
+
+def spawn_monster(x=None, y=None, static=None):
+    if static is None:
+        static = spawn_static_monster
+
+    if x is None:
+        x = player.centerx - 20
+
+    if y is None:
+        y = player.centery - 20
+
+    monster = {
+        "rect": pygame.Rect(x, y, 40, 40),
+        "hp": 100,
+        "max_hp": 100,
+        "speed": monster_speed,
+        "touch_timer": 0,
+        "alive": True,
+        "static": static
+    }
+
+    monsters.append(monster)
+
+
+def damage_monster(monster, damage):
+    if enemy_invincible:
+        return
+
+    monster["hp"] -= damage
+
+    if monster["hp"] <= 0:
+        monster["hp"] = 0
+        monster["alive"] = False
+
+
+def update_monsters():
+    for monster in monsters:
+        if not monster["alive"]:
+            continue
+
+        rect = monster["rect"]
+
+        if not freeze_all_monsters and not monster["static"]:
+            direction = pygame.Vector2(
+                player.centerx - rect.centerx,
+                player.centery - rect.centery
+            )
+
+            if direction.length() > 0:
+                direction = direction.normalize()
+                rect.x += int(direction.x * monster["speed"])
+                rect.y += int(direction.y * monster["speed"])
+
+        rect.clamp_ip(screen.get_rect())
+
+        if monster["touch_timer"] > 0:
+            monster["touch_timer"] -= 1
+
+
+def monster_touch_player():
+    global player_hp
+
+    for monster in monsters:
+        if not monster["alive"]:
+            continue
+
+        if monster["rect"].colliderect(player) and monster["touch_timer"] <= 0:
+            if not player_invincible:
+                player_hp = max(0, player_hp - monster_touch_damage)
+
+            monster["touch_timer"] = monster_touch_cooldown
+
+
+def get_weapon_damage_text(w):
+    if w["name"] == "Spear":
+        return (
+            str(w["damage"])
+            + " | Splash: "
+            + str(w["splash_damage"])
+            + " / "
+            + str(w["splash_chance"])
+            + "%"
+            + " | Range: "
+            + str(w["splash_range"])
+        )
+
+    return str(w["damage"])
 
 
 def get_flag_angle():
@@ -157,7 +271,9 @@ def point_in_polygon(point, polygon):
 
 def lines_intersect(a, b, c, d):
     def ccw(p1, p2, p3):
-        return (p3[1] - p1[1]) * (p2[0] - p1[0]) > (p2[1] - p1[1]) * (p3[0] - p1[0])
+        return (p3[1] - p1[1]) * (p2[0] - p1[0]) > (
+            p2[1] - p1[1]
+        ) * (p3[0] - p1[0])
 
     return ccw(a, c, d) != ccw(b, c, d) and ccw(a, b, c) != ccw(a, b, d)
 
@@ -197,6 +313,15 @@ def rect_hits_polygon(rect, polygon):
                 return True
 
     return False
+
+
+def rect_in_circle(rect, center, radius):
+    closest_x = max(rect.left, min(center.x, rect.right))
+    closest_y = max(rect.top, min(center.y, rect.bottom))
+
+    distance = pygame.Vector2(closest_x, closest_y).distance_to(center)
+
+    return distance <= radius
 
 
 def build_flag_attack_polygon():
@@ -289,9 +414,39 @@ def make_bullet():
     }
 
 
+def make_spear():
+    d = pygame.Vector2(player_direction.x, player_direction.y)
+
+    if d.length() == 0:
+        d = pygame.Vector2(0, 1)
+
+    d = d.normalize()
+
+    w = weapon()
+
+    rect = pygame.Rect(
+        player.centerx - w["size"] // 2,
+        player.centery - w["size"] // 2,
+        w["size"],
+        w["size"]
+    )
+
+    return {
+        "rect": rect,
+        "pos": pygame.Vector2(rect.x, rect.y),
+        "dir": d,
+        "damage": w["damage"],
+        "speed": w["speed"],
+        "size": w["size"],
+        "splash_damage": w["splash_damage"],
+        "splash_chance": w["splash_chance"],
+        "splash_range": w["splash_range"]
+    }
+
+
 def use_weapon():
     global attacking, attack_timer, attack_rect
-    global enemy_hp, enemy_alive, shoot_timer
+    global shoot_timer
     global flag_swinging, flag_timer, flag_side
     global attack_cooldown_timer
     global flag_attack_direction, flag_has_hit_enemy, flag_attack_polygon
@@ -302,6 +457,13 @@ def use_weapon():
         if shoot_timer <= 0:
             bullets.append(make_bullet())
             shoot_timer = w["cooldown"]
+
+        return
+
+    if w["type"] == "thrown_spear":
+        if attack_cooldown_timer <= 0:
+            spears.append(make_spear())
+            attack_cooldown_timer = w["cooldown"]
 
         return
 
@@ -325,17 +487,13 @@ def use_weapon():
     attack_cooldown_timer = w["cooldown"]
     attack_rect = attack_box(w["range"], w["size"])
 
-    if enemy_alive and attack_rect.colliderect(enemy):
-        if not enemy_invincible:
-            enemy_hp -= w["damage"]
-
-            if enemy_hp <= 0:
-                enemy_hp = 0
-                enemy_alive = False
+    for monster in monsters:
+        if monster["alive"] and attack_rect.colliderect(monster["rect"]):
+            damage_monster(monster, w["damage"])
 
 
 def update_flag_hitbox():
-    global enemy_hp, enemy_alive, flag_has_hit_enemy, flag_attack_polygon
+    global flag_has_hit_enemy, flag_attack_polygon
 
     if not flag_swinging:
         flag_attack_polygon = []
@@ -346,15 +504,14 @@ def update_flag_hitbox():
 
     flag_attack_polygon = build_flag_attack_polygon()
 
-    if enemy_alive and rect_hits_polygon(enemy, flag_attack_polygon) and not flag_has_hit_enemy:
-        if not enemy_invincible:
-            enemy_hp -= weapon()["damage"]
+    if flag_has_hit_enemy:
+        return
 
-            if enemy_hp <= 0:
-                enemy_hp = 0
-                enemy_alive = False
-
-        flag_has_hit_enemy = True
+    for monster in monsters:
+        if monster["alive"] and rect_hits_polygon(monster["rect"], flag_attack_polygon):
+            damage_monster(monster, weapon()["damage"])
+            flag_has_hit_enemy = True
+            break
 
 
 def draw_flag_cloth(px, py, direction):
@@ -487,6 +644,68 @@ def draw_fan():
     )
 
 
+def draw_spear_in_hand():
+    d = pygame.Vector2(player_direction.x, player_direction.y)
+
+    if d.length() == 0:
+        d = pygame.Vector2(0, 1)
+
+    d = d.normalize()
+
+    start = pygame.Vector2(player.centerx, player.centery)
+    end = start + d * 45
+
+    pygame.draw.line(
+        screen,
+        SPEAR_COLOR,
+        (int(start.x), int(start.y)),
+        (int(end.x), int(end.y)),
+        5
+    )
+
+    left = rotate(d, math.radians(150)) * 13
+    right = rotate(d, math.radians(-150)) * 13
+
+    pygame.draw.polygon(
+        screen,
+        SPEAR_TIP,
+        [
+            (int(end.x), int(end.y)),
+            (int(end.x + left.x), int(end.y + left.y)),
+            (int(end.x + right.x), int(end.y + right.y))
+        ]
+    )
+
+
+def draw_flying_spear(spear):
+    d = spear["dir"]
+    center = pygame.Vector2(spear["rect"].centerx, spear["rect"].centery)
+
+    start = center - d * 18
+    end = center + d * 22
+
+    pygame.draw.line(
+        screen,
+        SPEAR_COLOR,
+        (int(start.x), int(start.y)),
+        (int(end.x), int(end.y)),
+        5
+    )
+
+    left = rotate(d, math.radians(150)) * 12
+    right = rotate(d, math.radians(-150)) * 12
+
+    pygame.draw.polygon(
+        screen,
+        SPEAR_TIP,
+        [
+            (int(end.x), int(end.y)),
+            (int(end.x + left.x), int(end.y + left.y)),
+            (int(end.x + right.x), int(end.y + right.y))
+        ]
+    )
+
+
 def draw_weapon_icon():
     w = weapon()
 
@@ -508,13 +727,16 @@ def draw_weapon_icon():
     elif w["name"] == "Flag":
         draw_flag()
 
+    elif w["name"] == "Spear":
+        draw_spear_in_hand()
+
 
 def draw_weapon_list():
     x = WIDTH // 2 - 250
-    y = HEIGHT // 2 - 160
+    y = HEIGHT // 2 - 190
 
-    pygame.draw.rect(screen, DARK_GRAY, (x, y, 500, 320))
-    pygame.draw.rect(screen, WHITE, (x, y, 500, 320), 3)
+    pygame.draw.rect(screen, DARK_GRAY, (x, y, 500, 390))
+    pygame.draw.rect(screen, WHITE, (x, y, 500, 390), 3)
 
     title = font.render("WEAPON LIST", True, WHITE)
     guide = small_font.render(
@@ -541,8 +763,9 @@ def draw_weapon_list():
             text += " [EQUIPPED]"
 
         name_text = font.render(text, True, w["color"])
+
         info_text = small_font.render(
-            "Type: " + w["type"] + " | Damage: " + str(w["damage"]),
+            "Type: " + w["type"] + " | Damage: " + get_weapon_damage_text(w),
             True,
             WHITE
         )
@@ -563,8 +786,11 @@ def draw_dev():
         screen.blit(text, (x + 15, y + 12))
         return
 
-    pygame.draw.rect(screen, DARK_GRAY, (x, y, 310, 200))
-    pygame.draw.rect(screen, WHITE, (x, y, 310, 200), 2)
+    pygame.draw.rect(screen, DARK_GRAY, (x, y, 310, 265))
+    pygame.draw.rect(screen, WHITE, (x, y, 310, 265), 2)
+
+    spawn_mode_text = "STATIC" if spawn_static_monster else "CHASE"
+    freeze_text = "ON" if freeze_all_monsters else "OFF"
 
     items = [
         ("DEVELOPER PANEL", WHITE),
@@ -575,14 +801,19 @@ def draw_dev():
          GREEN if enemy_invincible else RED),
         ("F6: Hitbox: " + ("ON" if show_hitbox else "OFF"),
          GREEN if show_hitbox else RED),
+        ("N: Spawn Here", GRAY),
+        ("M: Spawn Mode: " + spawn_mode_text, WHITE),
+        ("B: Freeze All: " + freeze_text, GREEN if freeze_all_monsters else RED),
         ("ESC: Exit", GRAY)
     ]
 
     for i, item in enumerate(items):
         used_font = font if i == 0 else small_font
         text = used_font.render(item[0], True, item[1])
-        screen.blit(text, (x + 15, y + 15 + i * 30))
+        screen.blit(text, (x + 15, y + 15 + i * 25))
 
+
+spawn_monster(WIDTH - 300, HEIGHT // 2, static=False)
 
 running = True
 
@@ -633,6 +864,15 @@ while running:
                 elif event.key == pygame.K_F6:
                     show_hitbox = not show_hitbox
 
+                elif event.key == pygame.K_n:
+                    spawn_monster(player.centerx - 20, player.centery - 20)
+
+                elif event.key == pygame.K_m:
+                    spawn_static_monster = not spawn_static_monster
+
+                elif event.key == pygame.K_b:
+                    freeze_all_monsters = not freeze_all_monsters
+
     keys = pygame.key.get_pressed()
     move = pygame.Vector2(0, 0)
 
@@ -675,9 +915,8 @@ while running:
             flag_swinging = False
 
     update_flag_hitbox()
-
-    if touch_timer > 0:
-        touch_timer -= 1
+    update_monsters()
+    monster_touch_player()
 
     if shoot_timer > 0:
         shoot_timer -= 1
@@ -685,11 +924,11 @@ while running:
     if attack_cooldown_timer > 0:
         attack_cooldown_timer -= 1
 
-    if enemy_alive and player.colliderect(enemy) and touch_timer <= 0:
-        if not player_invincible:
-            player_hp = max(0, player_hp - touch_damage)
+    if spear_splash_timer > 0:
+        spear_splash_timer -= 1
 
-        touch_timer = touch_cooldown
+        if spear_splash_timer <= 0:
+            spear_splash_pos = None
 
     for bullet in bullets[:]:
         bullet["pos"] += bullet["dir"] * bullet_speed
@@ -700,15 +939,66 @@ while running:
             bullets.remove(bullet)
             continue
 
-        if enemy_alive and bullet["rect"].colliderect(enemy):
-            if not enemy_invincible:
-                enemy_hp -= bullet["damage"]
+        hit_monster = None
 
-                if enemy_hp <= 0:
-                    enemy_hp = 0
-                    enemy_alive = False
+        for monster in monsters:
+            if monster["alive"] and bullet["rect"].colliderect(monster["rect"]):
+                hit_monster = monster
+                break
 
+        if hit_monster is not None:
+            damage_monster(hit_monster, bullet["damage"])
             bullets.remove(bullet)
+
+    for spear in spears[:]:
+        spear["pos"] += spear["dir"] * spear["speed"]
+        spear["rect"].x = int(spear["pos"].x)
+        spear["rect"].y = int(spear["pos"].y)
+
+        if not screen.get_rect().colliderect(spear["rect"]):
+            spears.remove(spear)
+            continue
+
+        hit_monster = None
+
+        for monster in monsters:
+            if monster["alive"] and spear["rect"].colliderect(monster["rect"]):
+                hit_monster = monster
+                break
+
+        if hit_monster is not None:
+            hit_pos = pygame.Vector2(
+                hit_monster["rect"].centerx,
+                hit_monster["rect"].centery
+            )
+
+            damage_monster(hit_monster, spear["damage"])
+
+            splash_roll = random.randint(1, 100)
+            splash_triggered = splash_roll <= spear["splash_chance"]
+
+            if splash_triggered:
+                spear_splash_pos = hit_pos
+                spear_splash_timer = 14
+                last_spear_splash = True
+                last_spear_splash_damage = spear["splash_damage"]
+
+                for monster in monsters:
+                    if monster is hit_monster:
+                        continue
+
+                    if monster["alive"] and rect_in_circle(
+                        monster["rect"],
+                        spear_splash_pos,
+                        spear["splash_range"]
+                    ):
+                        damage_monster(monster, last_spear_splash_damage)
+
+            else:
+                last_spear_splash = False
+                last_spear_splash_damage = 0
+
+            spears.remove(spear)
 
     screen.fill(BLACK)
 
@@ -729,21 +1019,38 @@ while running:
 
     draw_weapon_icon()
 
-    if enemy_alive:
-        pygame.draw.rect(screen, RED, enemy)
+    for monster in monsters:
+        if not monster["alive"]:
+            continue
+
+        rect = monster["rect"]
+
+        pygame.draw.rect(screen, MONSTER_COLOR, rect)
+
+        if monster["static"]:
+            pygame.draw.rect(screen, WHITE, rect, 3)
+        else:
+            pygame.draw.rect(screen, MONSTER_OUTLINE, rect, 2)
 
         if enemy_invincible:
-            pygame.draw.rect(screen, GREEN, enemy, 3)
+            pygame.draw.rect(screen, GREEN, rect, 3)
 
-        enemy_text = font.render("Enemy HP: " + str(enemy_hp), True, WHITE)
-        screen.blit(enemy_text, (enemy.x - 25, enemy.y - 35))
+        hp_ratio = monster["hp"] / monster["max_hp"]
 
-        pygame.draw.rect(screen, RED, (enemy.x, enemy.y - 10, 40, 5))
+        pygame.draw.rect(screen, RED, (rect.x, rect.y - 10, 40, 5))
         pygame.draw.rect(
             screen,
             GREEN,
-            (enemy.x, enemy.y - 10, max(0, enemy_hp) * 40 / 100, 5)
+            (rect.x, rect.y - 10, max(0, hp_ratio * 40), 5)
         )
+
+        monster_text = small_font.render(
+            str(monster["hp"]),
+            True,
+            WHITE
+        )
+
+        screen.blit(monster_text, (rect.x + 4, rect.y - 32))
 
     if attacking:
         if weapon()["name"] == "Flag":
@@ -754,6 +1061,27 @@ while running:
 
     for bullet in bullets:
         pygame.draw.rect(screen, ORANGE, bullet["rect"])
+
+    for spear in spears:
+        draw_flying_spear(spear)
+
+    if spear_splash_timer > 0 and spear_splash_pos is not None:
+        pygame.draw.circle(
+            screen,
+            SPEAR_SPLASH,
+            (int(spear_splash_pos.x), int(spear_splash_pos.y)),
+            weapon()["splash_range"],
+            2
+        )
+
+        if show_hitbox:
+            pygame.draw.circle(
+                screen,
+                WHITE,
+                (int(spear_splash_pos.x), int(spear_splash_pos.y)),
+                weapon()["splash_range"],
+                3
+            )
 
     pygame.draw.rect(screen, RED, (20, 50, 100, 10))
     pygame.draw.rect(screen, GREEN, (20, 50, max(0, player_hp), 10))
@@ -774,7 +1102,7 @@ while running:
 
     screen.blit(
         small_font.render(
-            "Type: " + weapon()["type"] + " | Damage: " + str(weapon()["damage"]),
+            "Type: " + weapon()["type"] + " | Damage: " + get_weapon_damage_text(weapon()),
             True,
             WHITE
         ),
@@ -788,11 +1116,38 @@ while running:
 
     screen.blit(
         small_font.render(
+            "Spears: " + str(len(spears)),
+            True,
+            SPEAR_COLOR
+        ),
+        (20, 160)
+    )
+
+    alive_monsters = sum(1 for monster in monsters if monster["alive"])
+    spawn_mode_text = "STATIC" if spawn_static_monster else "CHASE"
+    freeze_text = "ON" if freeze_all_monsters else "OFF"
+
+    screen.blit(
+        small_font.render(
+            "Monsters: "
+            + str(alive_monsters)
+            + " | N: Spawn Here | M: "
+            + spawn_mode_text
+            + " | B Freeze: "
+            + freeze_text,
+            True,
+            MONSTER_COLOR
+        ),
+        (20, 185)
+    )
+
+    screen.blit(
+        small_font.render(
             "Player God: " + ("ON" if player_invincible else "OFF"),
             True,
             GREEN if player_invincible else GRAY
         ),
-        (20, 165)
+        (20, 210)
     )
 
     screen.blit(
@@ -801,7 +1156,7 @@ while running:
             True,
             GREEN if enemy_invincible else GRAY
         ),
-        (20, 190)
+        (20, 235)
     )
 
     screen.blit(
@@ -810,7 +1165,7 @@ while running:
             True,
             LIGHT_GRAY
         ),
-        (20, 220)
+        (20, 265)
     )
 
     screen.blit(
@@ -819,12 +1174,41 @@ while running:
             True,
             LIGHT_GRAY
         ),
-        (20, 245)
+        (20, 290)
     )
+
+    if weapon()["name"] == "Spear":
+        screen.blit(
+            small_font.render(
+                "Spear: Direct "
+                + str(weapon()["damage"])
+                + " | Circle Splash: "
+                + ("YES" if last_spear_splash else "NO")
+                + " | Splash Damage: "
+                + str(last_spear_splash_damage)
+                + " | Chance: "
+                + str(weapon()["splash_chance"])
+                + "%"
+                + " | Range: "
+                + str(weapon()["splash_range"]),
+                True,
+                SPEAR_COLOR
+            ),
+            (20, 315)
+        )
+
+        screen.blit(
+            small_font.render(
+                "Rule: Direct target does NOT take splash. Splash only hits nearby monsters.",
+                True,
+                LIGHT_GRAY
+            ),
+            (20, 340)
+        )
 
     screen.blit(
         font.render(
-            "Move: WASD/Arrow | TAB: Switch | I: Weapons | SPACE: Use",
+            "Move: WASD/Arrow | TAB: Switch | I: Weapons | SPACE: Use | N: Spawn Here | M: Spawn Mode | B: Freeze Monsters",
             True,
             WHITE
         ),
@@ -854,4 +1238,5 @@ while running:
     pygame.display.flip()
 
 pygame.event.set_grab(False)
-pygame.mouse.set_visible
+pygame.mouse.set_visible(True)
+pygame.quit()
