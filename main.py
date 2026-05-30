@@ -37,6 +37,10 @@ SPEAR_SPLASH = (60, 130, 180)
 MONSTER_COLOR = (210, 60, 80)
 MONSTER_OUTLINE = (255, 120, 120)
 
+DUAL_LONG = (180, 220, 255)
+DUAL_SHORT = (255, 220, 120)
+DUAL_SLASH = (120, 210, 255)
+
 font = pygame.font.SysFont(None, 30)
 small_font = pygame.font.SysFont(None, 24)
 big_font = pygame.font.SysFont(None, 70)
@@ -79,11 +83,20 @@ weapons = [
         "type": "thrown_spear",
         "damage": 10,
         "splash_damage": 3,
-        "splash_chance": 36,
+        "splash_chance": 12,
         "splash_range": 162,
         "speed": 13,
         "size": 12,
         "color": SPEAR_COLOR,
+        "cooldown": 45
+    },
+    {
+        "name": "Dual Blades",
+        "type": "dash_slash",
+        "damage": 18,
+        "dash_distance": 140,
+        "slash_width": 42,
+        "color": DUAL_SLASH,
         "cooldown": 45
     }
 ]
@@ -107,6 +120,13 @@ attacking = False
 attack_timer = 0
 attack_rect = pygame.Rect(0, 0, 0, 0)
 attack_cooldown_timer = 0
+
+dash_slashing = False
+dash_slash_timer = 0
+dash_slash_duration = 8
+dash_start_pos = pygame.Vector2(0, 0)
+dash_end_pos = pygame.Vector2(0, 0)
+dash_slash_width = 42
 
 flag_swinging = False
 flag_timer = 0
@@ -235,6 +255,15 @@ def get_weapon_damage_text(w):
             + str(w["splash_range"])
         )
 
+    if w["name"] == "Dual Blades":
+        return (
+            str(w["damage"])
+            + " | Dash: "
+            + str(w["dash_distance"])
+            + " | Width: "
+            + str(w["slash_width"])
+        )
+
     return str(w["damage"])
 
 
@@ -322,6 +351,27 @@ def rect_in_circle(rect, center, radius):
     distance = pygame.Vector2(closest_x, closest_y).distance_to(center)
 
     return distance <= radius
+
+
+def rect_hits_line(rect, start, end, width):
+    rect_center = pygame.Vector2(rect.centerx, rect.centery)
+    line_start = pygame.Vector2(start.x, start.y)
+    line_end = pygame.Vector2(end.x, end.y)
+
+    line = line_end - line_start
+
+    if line.length() == 0:
+        return rect.collidepoint(line_start.x, line_start.y)
+
+    t = (rect_center - line_start).dot(line) / line.length_squared()
+    t = max(0, min(1, t))
+
+    closest = line_start + line * t
+    distance = rect_center.distance_to(closest)
+
+    monster_radius = max(rect.width, rect.height) / 2
+
+    return distance <= width / 2 + monster_radius
 
 
 def build_flag_attack_polygon():
@@ -450,6 +500,8 @@ def use_weapon():
     global flag_swinging, flag_timer, flag_side
     global attack_cooldown_timer
     global flag_attack_direction, flag_has_hit_enemy, flag_attack_polygon
+    global dash_slashing, dash_slash_timer
+    global dash_start_pos, dash_end_pos, dash_slash_width
 
     w = weapon()
 
@@ -465,6 +517,47 @@ def use_weapon():
             spears.append(make_spear())
             attack_cooldown_timer = w["cooldown"]
 
+        return
+
+    if w["type"] == "dash_slash":
+        if attack_cooldown_timer > 0:
+            return
+
+        d = pygame.Vector2(player_direction.x, player_direction.y)
+
+        if d.length() == 0:
+            d = pygame.Vector2(0, 1)
+
+        d = d.normalize()
+
+        dash_start_pos = pygame.Vector2(player.centerx, player.centery)
+        target_pos = dash_start_pos + d * w["dash_distance"]
+
+        target_x = max(player.width // 2, min(WIDTH - player.width // 2, target_pos.x))
+        target_y = max(player.height // 2, min(HEIGHT - player.height // 2, target_pos.y))
+
+        dash_end_pos = pygame.Vector2(target_x, target_y)
+
+        player.centerx = int(dash_end_pos.x)
+        player.centery = int(dash_end_pos.y)
+        player.clamp_ip(screen.get_rect())
+
+        dash_slashing = True
+        attacking = True
+        dash_slash_timer = dash_slash_duration
+        attack_timer = dash_slash_duration
+        dash_slash_width = w["slash_width"]
+
+        for monster in monsters:
+            if monster["alive"] and rect_hits_line(
+                monster["rect"],
+                dash_start_pos,
+                dash_end_pos,
+                dash_slash_width
+            ):
+                damage_monster(monster, w["damage"])
+
+        attack_cooldown_timer = w["cooldown"]
         return
 
     if attack_cooldown_timer > 0:
@@ -706,6 +799,42 @@ def draw_flying_spear(spear):
     )
 
 
+def draw_dual_blades_in_hand():
+    d = pygame.Vector2(player_direction.x, player_direction.y)
+
+    if d.length() == 0:
+        d = pygame.Vector2(0, 1)
+
+    d = d.normalize()
+    side = pygame.Vector2(-d.y, d.x)
+    center = pygame.Vector2(player.centerx, player.centery)
+
+    long_start = center + side * 8
+    long_end = long_start + d * 48
+
+    pygame.draw.line(
+        screen,
+        DUAL_LONG,
+        (int(long_start.x), int(long_start.y)),
+        (int(long_end.x), int(long_end.y)),
+        5
+    )
+
+    short_start = center - side * 9
+    short_end = short_start + d * 32
+
+    pygame.draw.line(
+        screen,
+        DUAL_SHORT,
+        (int(short_start.x), int(short_start.y)),
+        (int(short_end.x), int(short_end.y)),
+        5
+    )
+
+    pygame.draw.circle(screen, WHITE, (int(long_start.x), int(long_start.y)), 4)
+    pygame.draw.circle(screen, WHITE, (int(short_start.x), int(short_start.y)), 4)
+
+
 def draw_weapon_icon():
     w = weapon()
 
@@ -730,13 +859,16 @@ def draw_weapon_icon():
     elif w["name"] == "Spear":
         draw_spear_in_hand()
 
+    elif w["name"] == "Dual Blades":
+        draw_dual_blades_in_hand()
+
 
 def draw_weapon_list():
-    x = WIDTH // 2 - 250
-    y = HEIGHT // 2 - 190
+    x = WIDTH // 2 - 260
+    y = HEIGHT // 2 - 220
 
-    pygame.draw.rect(screen, DARK_GRAY, (x, y, 500, 390))
-    pygame.draw.rect(screen, WHITE, (x, y, 500, 390), 3)
+    pygame.draw.rect(screen, DARK_GRAY, (x, y, 520, 450))
+    pygame.draw.rect(screen, WHITE, (x, y, 520, 450), 3)
 
     title = font.render("WEAPON LIST", True, WHITE)
     guide = small_font.render(
@@ -745,11 +877,11 @@ def draw_weapon_list():
         LIGHT_GRAY
     )
 
-    screen.blit(title, (x + 175, y + 20))
-    screen.blit(guide, (x + 55, y + 55))
+    screen.blit(title, (x + 185, y + 20))
+    screen.blit(guide, (x + 65, y + 55))
 
     for i, w in enumerate(weapons):
-        rect = pygame.Rect(x + 40, y + 100 + i * 65, 420, 55)
+        rect = pygame.Rect(x + 40, y + 100 + i * 65, 440, 55)
 
         if i == selected_weapon:
             pygame.draw.rect(screen, GRAY, rect)
@@ -908,6 +1040,12 @@ while running:
         if attack_timer <= 0:
             attacking = False
 
+    if dash_slashing:
+        dash_slash_timer -= 1
+
+        if dash_slash_timer <= 0:
+            dash_slashing = False
+
     if flag_swinging:
         flag_timer -= 1
 
@@ -1052,7 +1190,40 @@ while running:
 
         screen.blit(monster_text, (rect.x + 4, rect.y - 32))
 
-    if attacking:
+    if dash_slashing:
+        pygame.draw.line(
+            screen,
+            DUAL_SLASH,
+            (int(dash_start_pos.x), int(dash_start_pos.y)),
+            (int(dash_end_pos.x), int(dash_end_pos.y)),
+            dash_slash_width
+        )
+
+        pygame.draw.line(
+            screen,
+            WHITE,
+            (int(dash_start_pos.x), int(dash_start_pos.y)),
+            (int(dash_end_pos.x), int(dash_end_pos.y)),
+            3
+        )
+
+        if show_hitbox:
+            pygame.draw.circle(
+                screen,
+                WHITE,
+                (int(dash_start_pos.x), int(dash_start_pos.y)),
+                dash_slash_width // 2,
+                2
+            )
+            pygame.draw.circle(
+                screen,
+                WHITE,
+                (int(dash_end_pos.x), int(dash_end_pos.y)),
+                dash_slash_width // 2,
+                2
+            )
+
+    elif attacking:
         if weapon()["name"] == "Flag":
             if show_hitbox and len(flag_attack_polygon) >= 3:
                 pygame.draw.lines(screen, WHITE, True, flag_attack_polygon, 3)
@@ -1200,6 +1371,26 @@ while running:
         screen.blit(
             small_font.render(
                 "Rule: Direct target does NOT take splash. Splash only hits nearby monsters.",
+                True,
+                LIGHT_GRAY
+            ),
+            (20, 340)
+        )
+
+    if weapon()["name"] == "Dual Blades":
+        screen.blit(
+            small_font.render(
+                "Dual Blades: Dash slash in a straight line | Damage: "
+                + str(weapon()["damage"]),
+                True,
+                DUAL_SLASH
+            ),
+            (20, 315)
+        )
+
+        screen.blit(
+            small_font.render(
+                "Rule: SPACE makes player dash and slash along the dash path.",
                 True,
                 LIGHT_GRAY
             ),
