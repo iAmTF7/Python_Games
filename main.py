@@ -141,7 +141,7 @@ monsters = []
 monster_speed = 2.2
 monster_touch_damage = 10
 monster_touch_cooldown = 60
-spawn_static_monster = False
+spawn_static_monster = True
 freeze_all_monsters = False
 
 dev_panel_open = True
