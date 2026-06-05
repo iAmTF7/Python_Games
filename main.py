@@ -128,6 +128,9 @@ dash_start_pos = pygame.Vector2(0, 0)
 dash_end_pos = pygame.Vector2(0, 0)
 dash_slash_width = 42
 
+# ✅ Vệt dash: giữ trong lúc dash, hết dash mới mờ dần
+dash_trails = []
+
 flag_swinging = False
 flag_timer = 0
 flag_duration = 12
@@ -142,7 +145,7 @@ monster_speed = 2.2
 monster_touch_damage = 10
 monster_touch_cooldown = 60
 spawn_static_monster = True
-freeze_all_monsters = False
+freeze_all_monsters = True
 
 dev_panel_open = True
 player_invincible = False
@@ -211,7 +214,9 @@ def update_monsters():
 
         rect = monster["rect"]
 
-        if not freeze_all_monsters and not monster["static"]:
+        # ✅ B = Freeze All
+        # OFF thì toàn bộ quái chạy, không phụ thuộc static
+        if not freeze_all_monsters:
             direction = pygame.Vector2(
                 player.centerx - rect.centerx,
                 player.centery - rect.centery
@@ -548,6 +553,16 @@ def use_weapon():
         attack_timer = dash_slash_duration
         dash_slash_width = w["slash_width"]
 
+        # ✅ Vệt dash giữ nguyên trong lúc dash
+        # Sau khi delay hết mới mờ dần
+        dash_trails.append({
+            "start": dash_start_pos.copy(),
+            "end": dash_end_pos.copy(),
+            "width": dash_slash_width,
+            "alpha": 92,
+            "delay": dash_slash_duration
+        })
+
         for monster in monsters:
             if monster["alive"] and rect_hits_line(
                 monster["rect"],
@@ -707,34 +722,14 @@ def draw_fan():
     if len(polygon) < 3:
         return
 
-    pygame.draw.polygon(screen, FLAG_DARK, polygon)
+    fan_surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+    pygame.draw.polygon(
+        fan_surface,
+        (FLAG_DARK[0], FLAG_DARK[1], FLAG_DARK[2], 95),
+        polygon
+    )
+    screen.blit(fan_surface, (0, 0))
     pygame.draw.lines(screen, FLAG_LIGHT, True, polygon, 3)
-
-    d = pygame.Vector2(flag_attack_direction.x, flag_attack_direction.y)
-
-    if d.length() == 0:
-        d = pygame.Vector2(0, 1)
-
-    d = d.normalize()
-
-    center = pygame.Vector2(player.centerx, player.centery)
-    current_dir = rotate(d, math.radians(get_flag_angle()))
-    tip = center + current_dir * 95
-
-    pygame.draw.line(
-        screen,
-        FLAG_RED,
-        (int(center.x), int(center.y)),
-        (int(tip.x), int(tip.y)),
-        6
-    )
-
-    pygame.draw.circle(
-        screen,
-        WHITE,
-        (int(tip.x), int(tip.y)),
-        5
-    )
 
 
 def draw_spear_in_hand():
@@ -945,7 +940,7 @@ def draw_dev():
         screen.blit(text, (x + 15, y + 15 + i * 25))
 
 
-spawn_monster(WIDTH - 300, HEIGHT // 2, static=False)
+spawn_monster(WIDTH - 300, HEIGHT // 2)
 
 running = True
 
@@ -1055,6 +1050,18 @@ while running:
     update_flag_hitbox()
     update_monsters()
     monster_touch_player()
+
+    # ✅ Update vệt dash:
+    # delay còn thì giữ nguyên alpha
+    # delay hết thì bắt đầu mờ dần
+    for trail in dash_trails[:]:
+        if trail["delay"] > 0:
+            trail["delay"] -= 1
+        else:
+            trail["alpha"] -= 5
+
+        if trail["alpha"] <= 0:
+            dash_trails.remove(trail)
 
     if shoot_timer > 0:
         shoot_timer -= 1
@@ -1189,6 +1196,27 @@ while running:
         )
 
         screen.blit(monster_text, (rect.x + 4, rect.y - 32))
+
+    # ✅ Vẽ vệt dash mờ
+    for trail in dash_trails:
+        trail_surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+
+        color = (
+            DUAL_SLASH[0],
+            DUAL_SLASH[1],
+            DUAL_SLASH[2],
+            int(trail["alpha"])
+        )
+
+        pygame.draw.line(
+            trail_surface,
+            color,
+            (int(trail["start"].x), int(trail["start"].y)),
+            (int(trail["end"].x), int(trail["end"].y)),
+            int(trail["width"])
+        )
+
+        screen.blit(trail_surface, (0, 0))
 
     if dash_slashing:
         pygame.draw.line(
