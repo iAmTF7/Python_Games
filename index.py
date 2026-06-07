@@ -79,6 +79,8 @@ class Player:
         self.energy_regen=0
 
         self.special_items=[]
+
+        self.stat_points = 0
     
     def move(self,keys):
 
@@ -118,16 +120,13 @@ class Player:
         self.exp+=amount
         while self.exp>=self.exp_need:
             self.exp-=self.exp_need
-            self.level+=1
-            self.exp_need=int(
-                self.exp_need*1.3
-            )
-            self.max_hp+=10
-            self.max_armor+=5
-            self.damage+=3
-            self.hp=self.max_hp
-            self.armor=self.max_armor
-    
+            self.level += 1
+            self.stat_points += 1
+
+            self.exp_need = int(self.exp_need * 1.3)
+
+            self.hp = self.max_hp
+            self.armor = self.max_armor
 # ================= BULLET =================
 
 class Bullet:
@@ -474,7 +473,7 @@ class Room:
 class Game:
 
     def __init__(self):
-
+      
         self.player=Player()
         self.room=Room(1)
 
@@ -486,14 +485,52 @@ class Game:
             None,
             30
         )
+        self.show_levelup = False
+
+        self.hp_btn = pygame.Rect(600,220,40,40)
+        self.atk_btn = pygame.Rect(600,280,40,40)
+        self.spd_btn = pygame.Rect(600,340,40,40)
+        self.arm_btn = pygame.Rect(600,400,40,40)
 
     def event(self):
 
         for event in pygame.event.get():
 
-            if event.type==pygame.QUIT:
+            if self.show_levelup:
+                if event.type == pygame.QUIT:
+                    self.running = False
 
-                self.running=False
+                if event.type == pygame.MOUSEBUTTONDOWN:
+
+                    mx, my = pygame.mouse.get_pos()
+
+                    if self.player.stat_points > 0:
+
+                        if self.hp_btn.collidepoint(mx,my):
+
+                            self.player.max_hp += 20
+                            self.player.hp = self.player.max_hp
+                            self.player.stat_points -= 1
+
+                        elif self.atk_btn.collidepoint(mx,my):
+
+                            self.player.damage += 5
+                            self.player.stat_points -= 1
+
+                        elif self.spd_btn.collidepoint(mx,my):
+
+                            self.player.speed += 0.5
+                            self.player.stat_points -= 1
+
+                        elif self.arm_btn.collidepoint(mx,my):
+
+                            self.player.max_armor += 10
+                            self.player.armor = self.player.max_armor
+                            self.player.stat_points -= 1
+
+                        if self.player.stat_points <= 0:
+                            self.show_levelup = False
+                continue
 
             if event.type==pygame.MOUSEBUTTONDOWN:
 
@@ -513,6 +550,8 @@ class Game:
                     )
 
                     self.player.energy-=2
+
+        
     def pickup(self):
 
         for item in self.room.items[:]:
@@ -581,6 +620,9 @@ class Game:
 
     def update(self):
 
+
+        if self.show_levelup:
+            return
         keys=pygame.key.get_pressed()
 
         self.player.move(keys)
@@ -635,7 +677,12 @@ class Game:
 
                     if enemy.hp<=0:
 
+                        old_level = self.player.level
+
                         self.player.add_exp(25)
+
+                        if self.player.level > old_level:
+                            self.show_levelup = True
 
                         self.room.drop_item(
                             enemy.x,
@@ -657,6 +704,7 @@ class Game:
 
 
         # chuyển phòng
+        self.pickup()
         if self.room.cleared:
 
             player_center_x=(
@@ -683,55 +731,136 @@ class Game:
                 self.player.x=WIDTH//2
                 self.player.y=HEIGHT-120
 
-            self.pickup()
+            
 
     def draw_ui(self):
+        
+        txt=self.font.render(
+            f"LV:{self.player.level}",
+            True,
+            WHITE
+        )
+        screen.blit(
+            txt,
+            (20,100)
+        )
+        exp_txt = self.font.render(
+            f"EXP: {self.player.exp}/{self.player.exp_need}",
+            True,
+            WHITE
+        )
+
+        screen.blit(exp_txt,(20,140))
+        pygame.draw.rect(
+                screen,
+                GRAY,
+                (20,130,220,10)
+                )
+        pygame.draw.rect(
+                screen,
+                GREEN,
+                (
+                    20,
+                    130,
+                    self.player.exp/
+                    self.player.exp_need*220,
+                    10
+                )
+            )
+
 
         pygame.draw.rect(
             screen,
             DARK,
-            (10,10,260,120),
-            border_radius=12
+            (10,10,240,80),
+            border_radius=10
         )
+
+        hp_txt = self.font.render(
+            f"HP: {int(self.player.hp)}/{self.player.max_hp}",
+            True,
+            WHITE
+        )
+
+        armor_txt = self.font.render(
+            f"Armor: {int(self.player.armor)}/{self.player.max_armor}",
+            True,
+            WHITE
+        )
+
+        energy_txt = self.font.render(
+            f"Energy: {int(self.player.energy)}/{self.player.max_energy}",
+            True,
+            WHITE
+        )
+
+        lv_txt = self.font.render(
+            f"LV: {self.player.level}",
+            True,
+            WHITE
+        )
+
+        screen.blit(hp_txt, (20,20))
+        screen.blit(armor_txt, (20,50))
+        screen.blit(energy_txt, (20,80))
+        screen.blit(lv_txt, (20,110))
+    def draw_levelup(self):
 
         pygame.draw.rect(
             screen,
-            RED,
-            (
-                20,
-                20,
-                self.player.hp/
-                self.player.max_hp*220,
-                20
-            )
+            (35,35,45),
+            (250,150,500,350),
+            border_radius=10
         )
 
-        pygame.draw.rect(
-            screen,
-            BLUE,
-            (
-                20,
-                50,
-                self.player.armor/
-                self.player.max_armor*220,
-                15
-            )
+        title = self.font.render(
+            f"LEVEL UP! Points:{self.player.stat_points}",
+            True,
+            WHITE
         )
 
-        pygame.draw.rect(
-            screen,
-            YELLOW,
-            (
-                20,
-                75,
-                self.player.energy/
-                self.player.max_energy*220,
-                12
-            )
-        )
+        screen.blit(title,(300,180))
 
+        stats = [
+            ("HP", self.player.max_hp, self.hp_btn),
+            ("Attack", self.player.damage, self.atk_btn),
+            ("Speed", round(self.player.speed,1), self.spd_btn),
+            ("Armor", self.player.max_armor, self.arm_btn)
+        ]
+
+        y = 250
+
+        for name,val,btn in stats:
+
+            txt = self.font.render(
+                f"{name}: {val}",
+                True,
+                WHITE
+            )
+
+            screen.blit(txt,(320,y))
+
+            pygame.draw.rect(
+                screen,
+                RED,
+                btn,
+                border_radius=5
+            )
+
+            plus = self.font.render(
+                "+",
+                True,
+                WHITE
+            )
+
+            screen.blit(
+                plus,
+                (btn.x+12, btn.y+5)
+            )
+
+            y += 60
     def draw(self):
-
+        
         screen.fill(BLACK)
 
         self.room.draw()
@@ -742,7 +871,8 @@ class Game:
             bullet.draw()
 
         self.draw_ui()
-
+        if self.show_levelup:
+            self.draw_levelup()
         pygame.display.update()
 
     def run(self):
@@ -756,31 +886,6 @@ class Game:
             self.update()
 
             self.draw()
-            txt=self.font.render(
-                f"LV:{self.player.level}",
-                True,
-                WHITE
-                )
-            screen.blit(
-                txt,
-                (20,100)
-                )
-            pygame.draw.rect(
-                screen,
-                GRAY,
-                (20,130,220,10)
-                )
-            pygame.draw.rect(
-                screen,
-                GREEN,
-                (
-                    20,
-                    130,
-                    self.player.exp/
-                    self.player.exp_need*220,
-                    10
-                )
-            )
 
 
 if __name__ == "__main__":
