@@ -4,15 +4,22 @@ import random
 
 pygame.init()
 
+# =========================
+# SCREEN
+# =========================
 info = pygame.display.Info()
 WIDTH, HEIGHT = info.current_w, info.current_h
 screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.FULLSCREEN)
 pygame.display.set_caption("2D Dungeon Game")
+
 pygame.event.set_grab(True)
 pygame.mouse.set_visible(False)
 
 clock = pygame.time.Clock()
 
+# =========================
+# COLORS
+# =========================
 BLACK = (20, 20, 20)
 BLUE = (0, 200, 255)
 RED = (220, 50, 50)
@@ -41,22 +48,31 @@ DUAL_LONG = (180, 220, 255)
 DUAL_SHORT = (255, 220, 120)
 DUAL_SLASH = (120, 210, 255)
 
+# =========================
+# FONTS
+# =========================
 font = pygame.font.SysFont(None, 30)
 small_font = pygame.font.SysFont(None, 24)
 big_font = pygame.font.SysFont(None, 70)
 
+# =========================
+# PLAYER
+# =========================
 player = pygame.Rect(100, 100, 40, 40)
 player_speed = 5
 player_direction = pygame.Vector2(0, 1)
 player_hp = 100
 
+# =========================
+# WEAPONS
+# =========================
 weapons = [
     {
         "name": "Sword",
         "type": "melee",
         "damage": 25,
-        "range": 55,
-        "size": 40,
+        "range": 120,      # Đánh thẳng dài hơn
+        "size": 16,        # Hẹp hơn
         "color": YELLOW,
         "cooldown": 30
     },
@@ -98,6 +114,27 @@ weapons = [
         "slash_width": 42,
         "color": DUAL_SLASH,
         "cooldown": 45
+    },
+    {
+        "name": "Boomerang",
+        "type": "returning",
+        "damage": 15,
+        "speed": 14,
+        "return_speed": 16,
+        "out_duration": 25,
+        "size": 24,
+        "color": PURPLE,
+        "cooldown": 45
+    },
+    {
+        "name": "Earthshaker",
+        "type": "shockwave",
+        "damage": 25,
+        "max_radius": 160,
+        "expansion_speed": 12,
+        "knockback": 40,
+        "color": BROWN,
+        "cooldown": 60
     }
 ]
 
@@ -105,6 +142,9 @@ current_weapon = 0
 selected_weapon = 0
 weapon_list_open = False
 
+# =========================
+# PROJECTILES / ATTACKS
+# =========================
 bullets = []
 bullet_speed = 9
 bullet_size = 10
@@ -116,11 +156,20 @@ spear_splash_pos = None
 last_spear_splash = False
 last_spear_splash_damage = 0
 
+boomerangs = []
+shockwaves = []
+
 attacking = False
 attack_timer = 0
 attack_rect = pygame.Rect(0, 0, 0, 0)
 attack_cooldown_timer = 0
 
+# Sword line attack
+sword_attack_start = pygame.Vector2(0, 0)
+sword_attack_end = pygame.Vector2(0, 0)
+sword_attack_width = 16
+
+# Dash slash
 dash_slashing = False
 dash_slash_timer = 0
 dash_slash_duration = 8
@@ -128,9 +177,7 @@ dash_start_pos = pygame.Vector2(0, 0)
 dash_end_pos = pygame.Vector2(0, 0)
 dash_slash_width = 42
 
-# ✅ Vệt dash: giữ trong lúc dash, hết dash mới mờ dần
-dash_trails = []
-
+# Flag
 flag_swinging = False
 flag_timer = 0
 flag_duration = 12
@@ -140,19 +187,24 @@ flag_attack_direction = pygame.Vector2(0, 1)
 flag_has_hit_enemy = False
 flag_attack_polygon = []
 
+# Monsters
 monsters = []
 monster_speed = 2.2
 monster_touch_damage = 10
 monster_touch_cooldown = 60
-spawn_static_monster = True
-freeze_all_monsters = True
+spawn_static_monster = False
+freeze_all_monsters = False
 
+# Dev
 dev_panel_open = True
 player_invincible = False
 enemy_invincible = False
 show_hitbox = False
 
 
+# =========================
+# BASIC FUNCTIONS
+# =========================
 def weapon():
     return weapons[current_weapon]
 
@@ -166,7 +218,6 @@ def equip(index):
 def rotate(vec, angle):
     cos_a = math.cos(angle)
     sin_a = math.sin(angle)
-
     return pygame.Vector2(
         vec.x * cos_a - vec.y * sin_a,
         vec.x * sin_a + vec.y * cos_a
@@ -179,11 +230,10 @@ def spawn_monster(x=None, y=None, static=None):
 
     if x is None:
         x = player.centerx - 20
-
     if y is None:
         y = player.centery - 20
 
-    monster = {
+    monsters.append({
         "rect": pygame.Rect(x, y, 40, 40),
         "hp": 100,
         "max_hp": 100,
@@ -191,9 +241,7 @@ def spawn_monster(x=None, y=None, static=None):
         "touch_timer": 0,
         "alive": True,
         "static": static
-    }
-
-    monsters.append(monster)
+    })
 
 
 def damage_monster(monster, damage):
@@ -201,7 +249,6 @@ def damage_monster(monster, damage):
         return
 
     monster["hp"] -= damage
-
     if monster["hp"] <= 0:
         monster["hp"] = 0
         monster["alive"] = False
@@ -214,9 +261,7 @@ def update_monsters():
 
         rect = monster["rect"]
 
-        # ✅ B = Freeze All
-        # OFF thì toàn bộ quái chạy, không phụ thuộc static
-        if not freeze_all_monsters:
+        if not freeze_all_monsters and not monster["static"]:
             direction = pygame.Vector2(
                 player.centerx - rect.centerx,
                 player.centery - rect.centery
@@ -243,7 +288,6 @@ def monster_touch_player():
         if monster["rect"].colliderect(player) and monster["touch_timer"] <= 0:
             if not player_invincible:
                 player_hp = max(0, player_hp - monster_touch_damage)
-
             monster["touch_timer"] = monster_touch_cooldown
 
 
@@ -269,20 +313,21 @@ def get_weapon_damage_text(w):
             + str(w["slash_width"])
         )
 
+    if w["name"] == "Boomerang":
+        return str(w["damage"]) + " | Piercing & Return"
+
+    if w["name"] == "Earthshaker":
+        return str(w["damage"]) + " | AOE & Knockback"
+
+    if w["name"] == "Sword":
+        return str(w["damage"]) + " | Line: " + str(w["range"]) + " | Width: " + str(w["size"])
+
     return str(w["damage"])
 
 
-def get_flag_angle():
-    if not flag_swinging:
-        return 0
-
-    progress = 1 - flag_timer / flag_duration
-    start_angle = -45 * flag_side
-    end_angle = 45 * flag_side
-
-    return start_angle + (end_angle - start_angle) * progress
-
-
+# =========================
+# COLLISION HELPERS
+# =========================
 def point_in_polygon(point, polygon):
     x, y = point
     inside = False
@@ -294,7 +339,6 @@ def point_in_polygon(point, polygon):
 
         if (yi > y) != (yj > y):
             x_cross = (xj - xi) * (y - yi) / (yj - yi + 0.00001) + xi
-
             if x < x_cross:
                 inside = not inside
 
@@ -305,9 +349,7 @@ def point_in_polygon(point, polygon):
 
 def lines_intersect(a, b, c, d):
     def ccw(p1, p2, p3):
-        return (p3[1] - p1[1]) * (p2[0] - p1[0]) > (
-            p2[1] - p1[1]
-        ) * (p3[0] - p1[0])
+        return (p3[1] - p1[1]) * (p2[0] - p1[0]) > (p2[1] - p1[1]) * (p3[0] - p1[0])
 
     return ccw(a, c, d) != ccw(b, c, d) and ccw(a, b, c) != ccw(a, b, d)
 
@@ -316,12 +358,7 @@ def rect_hits_polygon(rect, polygon):
     if len(polygon) < 3:
         return False
 
-    rect_points = [
-        rect.topleft,
-        rect.topright,
-        rect.bottomright,
-        rect.bottomleft
-    ]
+    rect_points = [rect.topleft, rect.topright, rect.bottomright, rect.bottomleft]
 
     for point in rect_points:
         if point_in_polygon(point, polygon):
@@ -352,9 +389,7 @@ def rect_hits_polygon(rect, polygon):
 def rect_in_circle(rect, center, radius):
     closest_x = max(rect.left, min(center.x, rect.right))
     closest_y = max(rect.top, min(center.y, rect.bottom))
-
     distance = pygame.Vector2(closest_x, closest_y).distance_to(center)
-
     return distance <= radius
 
 
@@ -379,6 +414,20 @@ def rect_hits_line(rect, start, end, width):
     return distance <= width / 2 + monster_radius
 
 
+# =========================
+# FLAG HELPERS
+# =========================
+def get_flag_angle():
+    if not flag_swinging:
+        return 0
+
+    progress = 1 - flag_timer / flag_duration
+    start_angle = -45 * flag_side
+    end_angle = 45 * flag_side
+
+    return start_angle + (end_angle - start_angle) * progress
+
+
 def build_flag_attack_polygon():
     if not flag_swinging:
         return []
@@ -391,7 +440,6 @@ def build_flag_attack_polygon():
     d = d.normalize()
 
     center = pygame.Vector2(player.centerx, player.centery)
-
     start_angle = -45 * flag_side
     current_angle = get_flag_angle()
 
@@ -405,8 +453,8 @@ def build_flag_attack_polygon():
     for i in range(steps + 1):
         t = i / steps
         angle = start_angle + (current_angle - start_angle) * t
-        rotated = rotate(d, math.radians(angle))
 
+        rotated = rotate(d, math.radians(angle))
         outer_point = center + rotated * outer
         inner_point = center + rotated * inner
 
@@ -416,36 +464,31 @@ def build_flag_attack_polygon():
     return outer_points + inner_points[::-1]
 
 
-def attack_box(rng, size):
-    d = player_direction
+def update_flag_hitbox():
+    global flag_has_hit_enemy, flag_attack_polygon
 
-    if d.x > 0 and d.y == 0:
-        return pygame.Rect(player.right, player.y, rng, size)
+    if not flag_swinging:
+        flag_attack_polygon = []
+        return
 
-    if d.x < 0 and d.y == 0:
-        return pygame.Rect(player.x - rng, player.y, rng, size)
+    if weapon()["name"] != "Flag":
+        return
 
-    if d.y > 0 and d.x == 0:
-        return pygame.Rect(player.x, player.bottom, size, rng)
+    flag_attack_polygon = build_flag_attack_polygon()
 
-    if d.y < 0 and d.x == 0:
-        return pygame.Rect(player.x, player.y - rng, size, rng)
+    if flag_has_hit_enemy:
+        return
 
-    if d.x > 0 and d.y > 0:
-        return pygame.Rect(player.right, player.bottom, rng, rng)
-
-    if d.x > 0 and d.y < 0:
-        return pygame.Rect(player.right, player.y - rng, rng, rng)
-
-    if d.x < 0 and d.y > 0:
-        return pygame.Rect(player.x - rng, player.bottom, rng, rng)
-
-    if d.x < 0 and d.y < 0:
-        return pygame.Rect(player.x - rng, player.y - rng, rng, rng)
-
-    return pygame.Rect(0, 0, 0, 0)
+    for monster in monsters:
+        if monster["alive"] and rect_hits_polygon(monster["rect"], flag_attack_polygon):
+            damage_monster(monster, weapon()["damage"])
+            flag_has_hit_enemy = True
+            break
 
 
+# =========================
+# MAKE PROJECTILES
+# =========================
 def make_bullet():
     d = pygame.Vector2(player_direction.x, player_direction.y)
 
@@ -476,7 +519,6 @@ def make_spear():
         d = pygame.Vector2(0, 1)
 
     d = d.normalize()
-
     w = weapon()
 
     rect = pygame.Rect(
@@ -499,31 +541,87 @@ def make_spear():
     }
 
 
+def make_boomerang():
+    d = pygame.Vector2(player_direction.x, player_direction.y)
+
+    if d.length() == 0:
+        d = pygame.Vector2(0, 1)
+
+    d = d.normalize()
+    w = weapon()
+
+    rect = pygame.Rect(
+        player.centerx - w["size"] // 2,
+        player.centery - w["size"] // 2,
+        w["size"],
+        w["size"]
+    )
+
+    return {
+        "rect": rect,
+        "pos": pygame.Vector2(rect.x, rect.y),
+        "dir": d,
+        "damage": w["damage"],
+        "speed": w["speed"],
+        "return_speed": w["return_speed"],
+        "timer": w["out_duration"],
+        "size": w["size"],
+        "returning": False,
+        "hit_targets": []
+    }
+
+
+# =========================
+# USE WEAPON
+# =========================
 def use_weapon():
-    global attacking, attack_timer, attack_rect
+    global attacking, attack_timer, attack_rect, attack_cooldown_timer
     global shoot_timer
     global flag_swinging, flag_timer, flag_side
-    global attack_cooldown_timer
     global flag_attack_direction, flag_has_hit_enemy, flag_attack_polygon
     global dash_slashing, dash_slash_timer
     global dash_start_pos, dash_end_pos, dash_slash_width
+    global sword_attack_start, sword_attack_end, sword_attack_width
 
     w = weapon()
 
+    # Gun
     if w["type"] == "ranged":
         if shoot_timer <= 0:
             bullets.append(make_bullet())
             shoot_timer = w["cooldown"]
-
         return
 
+    # Spear
     if w["type"] == "thrown_spear":
         if attack_cooldown_timer <= 0:
             spears.append(make_spear())
             attack_cooldown_timer = w["cooldown"]
-
         return
 
+    # Boomerang
+    if w["type"] == "returning":
+        if attack_cooldown_timer <= 0:
+            boomerangs.append(make_boomerang())
+            attack_cooldown_timer = w["cooldown"]
+        return
+
+    # Earthshaker
+    if w["type"] == "shockwave":
+        if attack_cooldown_timer <= 0:
+            shockwaves.append({
+                "pos": pygame.Vector2(player.centerx, player.centery),
+                "current_radius": 10,
+                "max_radius": w["max_radius"],
+                "expansion_speed": w["expansion_speed"],
+                "damage": w["damage"],
+                "knockback": w["knockback"],
+                "hit_targets": []
+            })
+            attack_cooldown_timer = w["cooldown"]
+        return
+
+    # Dual Blades
     if w["type"] == "dash_slash":
         if attack_cooldown_timer > 0:
             return
@@ -553,16 +651,6 @@ def use_weapon():
         attack_timer = dash_slash_duration
         dash_slash_width = w["slash_width"]
 
-        # ✅ Vệt dash giữ nguyên trong lúc dash
-        # Sau khi delay hết mới mờ dần
-        dash_trails.append({
-            "start": dash_start_pos.copy(),
-            "end": dash_end_pos.copy(),
-            "width": dash_slash_width,
-            "alpha": 92,
-            "delay": dash_slash_duration
-        })
-
         for monster in monsters:
             if monster["alive"] and rect_hits_line(
                 monster["rect"],
@@ -580,48 +668,53 @@ def use_weapon():
 
     attacking = True
 
+    # =========================
+    # SWORD - LOGIC MỚI
+    # =========================
+    if w["name"] == "Sword":
+        attack_timer = 8
+        attack_cooldown_timer = w["cooldown"]
+
+        d = pygame.Vector2(player_direction.x, player_direction.y)
+
+        if d.length() == 0:
+            d = pygame.Vector2(0, 1)
+
+        d = d.normalize()
+
+        sword_attack_start = pygame.Vector2(player.centerx, player.centery)
+        sword_attack_end = sword_attack_start + d * w["range"]
+        sword_attack_width = w["size"]
+
+        for monster in monsters:
+            if monster["alive"] and rect_hits_line(
+                monster["rect"],
+                sword_attack_start,
+                sword_attack_end,
+                sword_attack_width
+            ):
+                damage_monster(monster, w["damage"])
+
+        return
+
+    # Flag
     if w["name"] == "Flag":
         attack_timer = flag_duration
         attack_cooldown_timer = w["cooldown"]
+
         flag_swinging = True
         flag_timer = flag_duration
         flag_side *= -1
+
         flag_attack_direction = pygame.Vector2(player_direction.x, player_direction.y)
         flag_has_hit_enemy = False
         flag_attack_polygon = build_flag_attack_polygon()
         return
 
-    attack_timer = 10
-    attack_cooldown_timer = w["cooldown"]
-    attack_rect = attack_box(w["range"], w["size"])
 
-    for monster in monsters:
-        if monster["alive"] and attack_rect.colliderect(monster["rect"]):
-            damage_monster(monster, w["damage"])
-
-
-def update_flag_hitbox():
-    global flag_has_hit_enemy, flag_attack_polygon
-
-    if not flag_swinging:
-        flag_attack_polygon = []
-        return
-
-    if weapon()["name"] != "Flag":
-        return
-
-    flag_attack_polygon = build_flag_attack_polygon()
-
-    if flag_has_hit_enemy:
-        return
-
-    for monster in monsters:
-        if monster["alive"] and rect_hits_polygon(monster["rect"], flag_attack_polygon):
-            damage_monster(monster, weapon()["damage"])
-            flag_has_hit_enemy = True
-            break
-
-
+# =========================
+# DRAW WEAPONS
+# =========================
 def draw_flag_cloth(px, py, direction):
     d = pygame.Vector2(direction.x, direction.y)
 
@@ -641,14 +734,10 @@ def draw_flag_cloth(px, py, direction):
 
     for i in range(segments + 1):
         t = i / segments
-
-        wave = math.sin(
-            flag_wave * 0.22 + t * math.pi * 2.2
-        ) * power * t
+        wave = math.sin(flag_wave * 0.22 + t * math.pi * 2.2) * power * t
 
         cx = px + side.x * length * t + d.x * wave
         cy = py + side.y * length * t + d.y * wave
-
         h = height * (1 - t * 0.08) / 2
 
         top.append((int(cx - d.x * h), int(cy - d.y * h)))
@@ -658,28 +747,6 @@ def draw_flag_cloth(px, py, direction):
 
     pygame.draw.polygon(screen, FLAG_RED, points)
     pygame.draw.lines(screen, WHITE, True, points, 2)
-
-    colors = [FLAG_LIGHT, WHITE, FLAG_DARK]
-
-    for n in range(3):
-        line = []
-        ratio = 0.28 + n * 0.18
-
-        for i in range(segments + 1):
-            t = i / segments
-
-            wave = math.sin(
-                flag_wave * 0.22 + t * math.pi * 2.2
-            ) * power * t
-
-            cx = px + side.x * length * t + d.x * wave
-            cy = py + side.y * length * t + d.y * wave
-
-            offset = (ratio - 0.5) * height * (1 - t * 0.08)
-
-            line.append((int(cx + d.x * offset), int(cy + d.y * offset)))
-
-        pygame.draw.lines(screen, colors[n], False, line, 2)
 
 
 def draw_flag():
@@ -698,20 +765,8 @@ def draw_flag():
 
     end = pygame.Vector2(player.centerx, player.centery) + d * 52
 
-    pygame.draw.line(
-        screen,
-        BROWN,
-        player.center,
-        (int(end.x), int(end.y)),
-        6
-    )
-
-    pygame.draw.circle(
-        screen,
-        LIGHT_GRAY,
-        (int(end.x), int(end.y)),
-        7
-    )
+    pygame.draw.line(screen, BROWN, player.center, (int(end.x), int(end.y)), 6)
+    pygame.draw.circle(screen, LIGHT_GRAY, (int(end.x), int(end.y)), 7)
 
     draw_flag_cloth(end.x, end.y, d)
 
@@ -722,13 +777,7 @@ def draw_fan():
     if len(polygon) < 3:
         return
 
-    fan_surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-    pygame.draw.polygon(
-        fan_surface,
-        (FLAG_DARK[0], FLAG_DARK[1], FLAG_DARK[2], 95),
-        polygon
-    )
-    screen.blit(fan_surface, (0, 0))
+    pygame.draw.polygon(screen, FLAG_DARK, polygon)
     pygame.draw.lines(screen, FLAG_LIGHT, True, polygon, 3)
 
 
@@ -801,11 +850,15 @@ def draw_dual_blades_in_hand():
         d = pygame.Vector2(0, 1)
 
     d = d.normalize()
+
     side = pygame.Vector2(-d.y, d.x)
     center = pygame.Vector2(player.centerx, player.centery)
 
     long_start = center + side * 8
     long_end = long_start + d * 48
+
+    short_start = center - side * 9
+    short_end = short_start + d * 32
 
     pygame.draw.line(
         screen,
@@ -814,9 +867,6 @@ def draw_dual_blades_in_hand():
         (int(long_end.x), int(long_end.y)),
         5
     )
-
-    short_start = center - side * 9
-    short_end = short_start + d * 32
 
     pygame.draw.line(
         screen,
@@ -833,12 +883,18 @@ def draw_dual_blades_in_hand():
 def draw_weapon_icon():
     w = weapon()
 
+    d = pygame.Vector2(player_direction.x, player_direction.y)
+
+    if d.length() == 0:
+        d = pygame.Vector2(0, 1)
+
+    d = d.normalize()
+
     if w["name"] == "Sword":
         end = (
-            player.centerx + int(player_direction.x * 35),
-            player.centery + int(player_direction.y * 35)
+            player.centerx + int(d.x * 35),
+            player.centery + int(d.y * 35)
         )
-
         pygame.draw.line(screen, YELLOW, player.center, end, 5)
 
     elif w["name"] == "Gun":
@@ -857,26 +913,47 @@ def draw_weapon_icon():
     elif w["name"] == "Dual Blades":
         draw_dual_blades_in_hand()
 
+    elif w["name"] == "Boomerang":
+        pygame.draw.circle(
+            screen,
+            PURPLE,
+            (player.centerx + int(d.x * 20), player.centery + int(d.y * 20)),
+            8,
+            3
+        )
 
+    elif w["name"] == "Earthshaker":
+        head_center = (
+            player.centerx + int(d.x * 25),
+            player.centery + int(d.y * 25)
+        )
+
+        pygame.draw.line(screen, BROWN, player.center, head_center, 4)
+        pygame.draw.rect(
+            screen,
+            GRAY,
+            (head_center[0] - 10, head_center[1] - 10, 20, 20)
+        )
+
+
+# =========================
+# DRAW UI
+# =========================
 def draw_weapon_list():
     x = WIDTH // 2 - 260
-    y = HEIGHT // 2 - 220
+    y = HEIGHT // 2 - 250
 
-    pygame.draw.rect(screen, DARK_GRAY, (x, y, 520, 450))
-    pygame.draw.rect(screen, WHITE, (x, y, 520, 450), 3)
+    pygame.draw.rect(screen, DARK_GRAY, (x, y, 520, 520))
+    pygame.draw.rect(screen, WHITE, (x, y, 520, 520), 3)
 
     title = font.render("WEAPON LIST", True, WHITE)
-    guide = small_font.render(
-        "I: Close | UP/DOWN: Select | ENTER: Equip",
-        True,
-        LIGHT_GRAY
-    )
+    guide = small_font.render("I: Close | UP/DOWN: Select | ENTER: Equip", True, LIGHT_GRAY)
 
     screen.blit(title, (x + 185, y + 20))
     screen.blit(guide, (x + 65, y + 55))
 
     for i, w in enumerate(weapons):
-        rect = pygame.Rect(x + 40, y + 100 + i * 65, 440, 55)
+        rect = pygame.Rect(x + 40, y + 90 + i * 55, 440, 48)
 
         if i == selected_weapon:
             pygame.draw.rect(screen, GRAY, rect)
@@ -890,15 +967,14 @@ def draw_weapon_list():
             text += " [EQUIPPED]"
 
         name_text = font.render(text, True, w["color"])
-
         info_text = small_font.render(
             "Type: " + w["type"] + " | Damage: " + get_weapon_damage_text(w),
             True,
             WHITE
         )
 
-        screen.blit(name_text, (rect.x + 20, rect.y + 8))
-        screen.blit(info_text, (rect.x + 20, rect.y + 32))
+        screen.blit(name_text, (rect.x + 20, rect.y + 6))
+        screen.blit(info_text, (rect.x + 20, rect.y + 28))
 
 
 def draw_dev():
@@ -922,12 +998,9 @@ def draw_dev():
     items = [
         ("DEVELOPER PANEL", WHITE),
         ("F3: Collapse / Open", GRAY),
-        ("F4: Player God: " + ("ON" if player_invincible else "OFF"),
-         GREEN if player_invincible else RED),
-        ("F5: Enemy God: " + ("ON" if enemy_invincible else "OFF"),
-         GREEN if enemy_invincible else RED),
-        ("F6: Hitbox: " + ("ON" if show_hitbox else "OFF"),
-         GREEN if show_hitbox else RED),
+        ("F4: Player God: " + ("ON" if player_invincible else "OFF"), GREEN if player_invincible else RED),
+        ("F5: Enemy God: " + ("ON" if enemy_invincible else "OFF"), GREEN if enemy_invincible else RED),
+        ("F6: Hitbox: " + ("ON" if show_hitbox else "OFF"), GREEN if show_hitbox else RED),
         ("N: Spawn Here", GRAY),
         ("M: Spawn Mode: " + spawn_mode_text, WHITE),
         ("B: Freeze All: " + freeze_text, GREEN if freeze_all_monsters else RED),
@@ -940,13 +1013,19 @@ def draw_dev():
         screen.blit(text, (x + 15, y + 15 + i * 25))
 
 
-spawn_monster(WIDTH - 300, HEIGHT // 2)
+# =========================
+# START GAME
+# =========================
+spawn_monster(WIDTH - 300, HEIGHT // 2, static=False)
 
 running = True
 
 while running:
     clock.tick(60)
 
+    # =========================
+    # EVENTS
+    # =========================
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
@@ -1000,6 +1079,9 @@ while running:
                 elif event.key == pygame.K_b:
                     freeze_all_monsters = not freeze_all_monsters
 
+    # =========================
+    # PLAYER MOVE
+    # =========================
     keys = pygame.key.get_pressed()
     move = pygame.Vector2(0, 0)
 
@@ -1027,41 +1109,29 @@ while running:
 
     player.clamp_ip(screen.get_rect())
 
+    # =========================
+    # TIMERS
+    # =========================
     flag_wave += 1
 
     if attacking:
         attack_timer -= 1
-
         if attack_timer <= 0:
             attacking = False
 
     if dash_slashing:
         dash_slash_timer -= 1
-
         if dash_slash_timer <= 0:
             dash_slashing = False
 
     if flag_swinging:
         flag_timer -= 1
-
         if flag_timer <= 0:
             flag_swinging = False
 
     update_flag_hitbox()
     update_monsters()
     monster_touch_player()
-
-    # ✅ Update vệt dash:
-    # delay còn thì giữ nguyên alpha
-    # delay hết thì bắt đầu mờ dần
-    for trail in dash_trails[:]:
-        if trail["delay"] > 0:
-            trail["delay"] -= 1
-        else:
-            trail["alpha"] -= 5
-
-        if trail["alpha"] <= 0:
-            dash_trails.remove(trail)
 
     if shoot_timer > 0:
         shoot_timer -= 1
@@ -1075,6 +1145,9 @@ while running:
         if spear_splash_timer <= 0:
             spear_splash_pos = None
 
+    # =========================
+    # UPDATE BULLETS
+    # =========================
     for bullet in bullets[:]:
         bullet["pos"] += bullet["dir"] * bullet_speed
         bullet["rect"].x = int(bullet["pos"].x)
@@ -1095,6 +1168,9 @@ while running:
             damage_monster(hit_monster, bullet["damage"])
             bullets.remove(bullet)
 
+    # =========================
+    # UPDATE SPEARS
+    # =========================
     for spear in spears[:]:
         spear["pos"] += spear["dir"] * spear["speed"]
         spear["rect"].x = int(spear["pos"].x)
@@ -1120,9 +1196,8 @@ while running:
             damage_monster(hit_monster, spear["damage"])
 
             splash_roll = random.randint(1, 100)
-            splash_triggered = splash_roll <= spear["splash_chance"]
 
-            if splash_triggered:
+            if splash_roll <= spear["splash_chance"]:
                 spear_splash_pos = hit_pos
                 spear_splash_timer = 14
                 last_spear_splash = True
@@ -1145,6 +1220,73 @@ while running:
 
             spears.remove(spear)
 
+    # =========================
+    # UPDATE BOOMERANGS
+    # =========================
+    for b in boomerangs[:]:
+        if not b["returning"]:
+            b["pos"] += b["dir"] * b["speed"]
+            b["timer"] -= 1
+
+            if b["timer"] <= 0:
+                b["returning"] = True
+                b["hit_targets"].clear()
+
+        else:
+            target = pygame.Vector2(player.centerx, player.centery)
+            current = b["pos"]
+            d = target - current
+
+            if d.length() < 20:
+                boomerangs.remove(b)
+                continue
+
+            if d.length() > 0:
+                d = d.normalize()
+                b["pos"] += d * b["return_speed"]
+
+        b["rect"].x = int(b["pos"].x)
+        b["rect"].y = int(b["pos"].y)
+
+        for monster in monsters:
+            if monster["alive"] and b["rect"].colliderect(monster["rect"]):
+                if monster not in b["hit_targets"]:
+                    damage_monster(monster, b["damage"])
+                    b["hit_targets"].append(monster)
+
+    # =========================
+    # UPDATE SHOCKWAVES
+    # =========================
+    for wave in shockwaves[:]:
+        wave["current_radius"] += wave["expansion_speed"]
+
+        if wave["current_radius"] >= wave["max_radius"]:
+            shockwaves.remove(wave)
+            continue
+
+        for monster in monsters:
+            if monster["alive"] and monster not in wave["hit_targets"]:
+                if rect_in_circle(monster["rect"], wave["pos"], wave["current_radius"]):
+                    damage_monster(monster, wave["damage"])
+                    wave["hit_targets"].append(monster)
+
+                    m_center = pygame.Vector2(
+                        monster["rect"].centerx,
+                        monster["rect"].centery
+                    )
+
+                    push_dir = m_center - wave["pos"]
+
+                    if push_dir.length() > 0:
+                        push_dir = push_dir.normalize()
+
+                        monster["rect"].x += int(push_dir.x * wave["knockback"])
+                        monster["rect"].y += int(push_dir.y * wave["knockback"])
+                        monster["rect"].clamp_ip(screen.get_rect())
+
+    # =========================
+    # DRAW
+    # =========================
     screen.fill(BLACK)
 
     if flag_swinging and weapon()["name"] == "Flag":
@@ -1164,6 +1306,7 @@ while running:
 
     draw_weapon_icon()
 
+    # Monsters
     for monster in monsters:
         if not monster["alive"]:
             continue
@@ -1186,38 +1329,13 @@ while running:
         pygame.draw.rect(
             screen,
             GREEN,
-            (rect.x, rect.y - 10, max(0, hp_ratio * 40), 5)
+            (rect.x, rect.y - 10, int(max(0, hp_ratio * 40)), 5)
         )
 
-        monster_text = small_font.render(
-            str(monster["hp"]),
-            True,
-            WHITE
-        )
-
+        monster_text = small_font.render(str(monster["hp"]), True, WHITE)
         screen.blit(monster_text, (rect.x + 4, rect.y - 32))
 
-    # ✅ Vẽ vệt dash mờ
-    for trail in dash_trails:
-        trail_surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-
-        color = (
-            DUAL_SLASH[0],
-            DUAL_SLASH[1],
-            DUAL_SLASH[2],
-            int(trail["alpha"])
-        )
-
-        pygame.draw.line(
-            trail_surface,
-            color,
-            (int(trail["start"].x), int(trail["start"].y)),
-            (int(trail["end"].x), int(trail["end"].y)),
-            int(trail["width"])
-        )
-
-        screen.blit(trail_surface, (0, 0))
-
+    # Dash slash draw
     if dash_slashing:
         pygame.draw.line(
             screen,
@@ -1243,6 +1361,7 @@ while running:
                 dash_slash_width // 2,
                 2
             )
+
             pygame.draw.circle(
                 screen,
                 WHITE,
@@ -1251,18 +1370,69 @@ while running:
                 2
             )
 
+    # Normal attack draw
     elif attacking:
         if weapon()["name"] == "Flag":
             if show_hitbox and len(flag_attack_polygon) >= 3:
                 pygame.draw.lines(screen, WHITE, True, flag_attack_polygon, 3)
+
+        elif weapon()["name"] == "Sword":
+            pygame.draw.line(
+                screen,
+                YELLOW,
+                (int(sword_attack_start.x), int(sword_attack_start.y)),
+                (int(sword_attack_end.x), int(sword_attack_end.y)),
+                sword_attack_width
+            )
+
+            pygame.draw.circle(
+                screen,
+                WHITE,
+                (int(sword_attack_end.x), int(sword_attack_end.y)),
+                5
+            )
+
+            if show_hitbox:
+                pygame.draw.line(
+                    screen,
+                    WHITE,
+                    (int(sword_attack_start.x), int(sword_attack_start.y)),
+                    (int(sword_attack_end.x), int(sword_attack_end.y)),
+                    2
+                )
+
         else:
             pygame.draw.rect(screen, weapon()["color"], attack_rect)
 
+    # Projectiles draw
     for bullet in bullets:
         pygame.draw.rect(screen, ORANGE, bullet["rect"])
 
     for spear in spears:
         draw_flying_spear(spear)
+
+    for b in boomerangs:
+        pygame.draw.circle(
+            screen,
+            PURPLE,
+            (int(b["rect"].centerx), int(b["rect"].centery)),
+            b["size"] // 2,
+            4
+        )
+
+    for wave in shockwaves:
+        thickness = max(
+            1,
+            int(10 * (1 - wave["current_radius"] / wave["max_radius"]))
+        )
+
+        pygame.draw.circle(
+            screen,
+            BROWN,
+            (int(wave["pos"].x), int(wave["pos"].y)),
+            int(wave["current_radius"]),
+            thickness
+        )
 
     if spear_splash_timer > 0 and spear_splash_pos is not None:
         pygame.draw.circle(
@@ -1282,6 +1452,9 @@ while running:
                 3
             )
 
+    # =========================
+    # HUD
+    # =========================
     pygame.draw.rect(screen, RED, (20, 50, 100, 10))
     pygame.draw.rect(screen, GREEN, (20, 50, max(0, player_hp), 10))
 
@@ -1309,17 +1482,12 @@ while running:
     )
 
     screen.blit(
-        font.render("Bullets: " + str(len(bullets)), True, PURPLE),
-        (20, 135)
-    )
-
-    screen.blit(
-        small_font.render(
-            "Spears: " + str(len(spears)),
+        font.render(
+            "Projectiles Active: " + str(len(bullets) + len(spears) + len(boomerangs) + len(shockwaves)),
             True,
-            SPEAR_COLOR
+            PURPLE
         ),
-        (20, 160)
+        (20, 135)
     )
 
     alive_monsters = sum(1 for monster in monsters if monster["alive"])
@@ -1337,7 +1505,7 @@ while running:
             True,
             MONSTER_COLOR
         ),
-        (20, 185)
+        (20, 165)
     )
 
     screen.blit(
@@ -1346,7 +1514,7 @@ while running:
             True,
             GREEN if player_invincible else GRAY
         ),
-        (20, 210)
+        (20, 190)
     )
 
     screen.blit(
@@ -1355,7 +1523,7 @@ while running:
             True,
             GREEN if enemy_invincible else GRAY
         ),
-        (20, 235)
+        (20, 215)
     )
 
     screen.blit(
@@ -1364,36 +1532,37 @@ while running:
             True,
             LIGHT_GRAY
         ),
-        (20, 265)
+        (20, 245)
     )
 
-    screen.blit(
-        small_font.render(
-            "Shoot Cooldown: " + str(shoot_timer),
-            True,
-            LIGHT_GRAY
-        ),
-        (20, 290)
-    )
+    # Weapon info
+    if weapon()["name"] == "Sword":
+        screen.blit(
+            small_font.render(
+                "Sword: Straight long slash | Range: "
+                + str(weapon()["range"])
+                + " | Width: "
+                + str(weapon()["size"]),
+                True,
+                YELLOW
+            ),
+            (20, 280)
+        )
 
-    if weapon()["name"] == "Spear":
+    elif weapon()["name"] == "Spear":
         screen.blit(
             small_font.render(
                 "Spear: Direct "
                 + str(weapon()["damage"])
-                + " | Circle Splash: "
-                + ("YES" if last_spear_splash else "NO")
                 + " | Splash Damage: "
                 + str(last_spear_splash_damage)
                 + " | Chance: "
                 + str(weapon()["splash_chance"])
-                + "%"
-                + " | Range: "
-                + str(weapon()["splash_range"]),
+                + "%",
                 True,
                 SPEAR_COLOR
             ),
-            (20, 315)
+            (20, 280)
         )
 
         screen.blit(
@@ -1402,27 +1571,37 @@ while running:
                 True,
                 LIGHT_GRAY
             ),
-            (20, 340)
+            (20, 305)
         )
 
-    if weapon()["name"] == "Dual Blades":
+    elif weapon()["name"] == "Dual Blades":
         screen.blit(
             small_font.render(
-                "Dual Blades: Dash slash in a straight line | Damage: "
-                + str(weapon()["damage"]),
+                "Dual Blades: Dash slash in a straight line",
                 True,
                 DUAL_SLASH
             ),
-            (20, 315)
+            (20, 280)
         )
 
+    elif weapon()["name"] == "Boomerang":
         screen.blit(
             small_font.render(
-                "Rule: SPACE makes player dash and slash along the dash path.",
+                "Boomerang: Flies out, then returns to player",
                 True,
-                LIGHT_GRAY
+                PURPLE
             ),
-            (20, 340)
+            (20, 280)
+        )
+
+    elif weapon()["name"] == "Earthshaker":
+        screen.blit(
+            small_font.render(
+                "Earthshaker: Expanding AOE shockwave",
+                True,
+                BROWN
+            ),
+            (20, 280)
         )
 
     screen.blit(
