@@ -81,6 +81,9 @@ class Player:
         self.special_items=[]
 
         self.stat_points = 0
+        self.haste_timer = 0
+        self.iron_skin_timer = 0
+        self.berserk_timer = 0
     
     def move(self,keys):
 
@@ -99,8 +102,13 @@ class Player:
         self.vx*=self.friction
         self.vy*=self.friction
 
-        self.vx=max(-self.speed,min(self.speed,self.vx))
-        self.vy=max(-self.speed,min(self.speed,self.vy))
+        speed = self.speed
+
+        if self.haste_timer > 0:
+            speed *= 1.5
+
+        self.vx=max(-speed,min(speed,self.vx))
+        self.vy=max(-speed,min(speed,self.vy))
 
         self.x+=self.vx
         self.y+=self.vy
@@ -229,8 +237,6 @@ class Enemy:
                     0,
                     player.armor-.25
                 )
-
-            else:
 
                 player.hp=max(
                     0,
@@ -390,6 +396,10 @@ class Room:
 
             enemy.move(player)
             enemy.attack(player)
+            damage = 0.25
+
+            if player.iron_skin_timer > 0:
+                damage *= 0.5
 
         if len(self.enemies)==0:
             self.cleared=True
@@ -398,7 +408,7 @@ class Room:
 
         # drop cân bằng ~40%
 
-        if random.random()<0.4:
+        if random.random()<0.6:
 
             self.items.append(
                 Item(
@@ -538,14 +548,18 @@ class Game:
 
                     mx,my=pygame.mouse.get_pos()
 
-                    self.bullets.append(
+                    # create bullet with possible berserk damage multiplier
+                    damage = self.player.damage
+                    if self.player.berserk_timer > 0:
+                        damage *= 1.5
 
+                    self.bullets.append(
                         Bullet(
                             self.player.x+15,
                             self.player.y+15,
                             mx,
                             my,
-                            self.player.damage
+                            damage
                         )
                     )
 
@@ -573,6 +587,8 @@ class Game:
                         self.player.hp+20,
                         self.player.max_hp
                     )
+                    if random.random()<0.2:
+                        self.player.haste_timer=FPS*5
 
                 elif item.type=="armor":
 
@@ -580,6 +596,8 @@ class Game:
                         self.player.armor+20,
                         self.player.max_armor
                     )
+                    if random.random()<0.2:
+                        self.player.iron_skin_timer=FPS*5
 
                 elif item.type=="energy":
 
@@ -587,6 +605,8 @@ class Game:
                         self.player.energy+30,
                         self.player.max_energy
                     )
+                    if random.random()<0.2:
+                        self.player.berserk_timer=FPS*5
 
                 elif item.type=="regen_hp":
 
@@ -643,7 +663,14 @@ class Game:
             self.player.energy+self.player.energy_regen,
             self.player.max_energy
         )
+        if self.player.berserk_timer > 0:
+            self.player.berserk_timer -= 1
 
+        if self.player.haste_timer > 0:
+            self.player.haste_timer -= 1
+
+        if self.player.iron_skin_timer > 0:
+            self.player.iron_skin_timer -= 1
 
         # xử lý đạn
         for bullet in self.bullets[:]:
@@ -804,6 +831,25 @@ class Game:
         screen.blit(armor_txt, (20,50))
         screen.blit(energy_txt, (20,80))
         screen.blit(lv_txt, (20,110))
+
+        buffs=[]
+
+        if self.player.berserk_timer>0:
+            buffs.append("BERSERK")
+
+        if self.player.haste_timer>0:
+            buffs.append("HASTE")
+
+        if self.player.iron_skin_timer>0:
+            buffs.append("IRON SKIN")
+
+        txt=self.font.render(
+            " | ".join(buffs),
+            True,
+            YELLOW
+        )
+
+        screen.blit(txt,(300,20))
     def draw_levelup(self):
 
         pygame.draw.rect(
