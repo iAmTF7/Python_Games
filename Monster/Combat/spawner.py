@@ -1,32 +1,17 @@
-"""
-Module spawner.py - Spawn quái vật + Factory Pattern
+"""Monster factory/spawner."""
 
-OOP Principles:
-    - Factory Pattern: tạo quái theo type string
-    - Đóng gói (Encapsulation): registry private
-    - Bug #3 đã sửa: fallback spawn ở nhiều vị trí khác nhau
-"""
+from __future__ import annotations
 
-import random
 import math
+import random
+from typing import Dict, List, Tuple, Type
 
 from ..Config.settings import Settings
 
 
 class MonsterSpawner:
-    """
-    Lớp quản lý spawn quái vật.
-    Kết hợp logic spawn + Factory Pattern.
+    """Create and spawn monsters while preserving the original spawn rules."""
 
-    Factory Pattern:
-        - register_monster_class(): đăng ký loại quái
-        - create_monster(): tạo quái theo type string
-        - create_random_monster(): tạo quái ngẫu nhiên theo level
-
-    Bug #3 đã sửa: Fallback spawn ở nhiều vị trí khác nhau (4 góc + random).
-    """
-
-    # 4 góc fallback (Bug #3: không spawn cùng 1 góc nữa)
     _FALLBACK_CORNERS = [
         "top_left",
         "top_right",
@@ -34,103 +19,67 @@ class MonsterSpawner:
         "bottom_right",
     ]
 
-    def __init__(self, screen_width: int = Settings.SCREEN_WIDTH,
-                 screen_height: int = Settings.SCREEN_HEIGHT):
-        """
-        Khởi tạo MonsterSpawner.
-
-        Args:
-            screen_width: Chiều rộng màn hình
-            screen_height: Chiều cao màn hình
-        """
+    def __init__(
+        self,
+        screen_width: int = Settings.SCREEN_WIDTH,
+        screen_height: int = Settings.SCREEN_HEIGHT,
+    ):
         self._screen_width = screen_width
         self._screen_height = screen_height
-        self._monster_classes = {}  # Registry các loại quái (Factory)
-        self._fallback_index = 0   # Index góc fallback (Bug #3)
-
-    # === FACTORY PATTERN ===
+        self._monster_classes: Dict[str, Type] = {}
+        self._fallback_index = 0
 
     def register_monster_class(self, name: str, cls):
-        """
-        Đăng ký một loại quái vật vào factory.
-
-        Args:
-            name: Tên loại quái (ví dụ: "melee", "ranged")
-            cls: Class của quái vật
-        """
         self._monster_classes[name] = cls
 
+    def register_defaults(self):
+        """Register the built-in melee and ranged monster classes."""
+        from ..Monster.melee import MeleeMonster
+        from ..Monster.ranged import RangedMonster
+
+        self.register_monster_class("melee", MeleeMonster)
+        self.register_monster_class("ranged", RangedMonster)
+        return self
+
+    @classmethod
+    def with_defaults(
+        cls,
+        screen_width: int = Settings.SCREEN_WIDTH,
+        screen_height: int = Settings.SCREEN_HEIGHT,
+    ):
+        """Convenience constructor with built-in monsters registered."""
+        return cls(screen_width, screen_height).register_defaults()
+
     def create_monster(self, monster_type: str, x: float, y: float):
-        """
-        Factory Method: Tạo quái vật theo loại.
-
-        Args:
-            monster_type: Loại quái ("melee" hoặc "ranged")
-            x, y: Vị trí spawn
-
-        Returns:
-            Đối tượng quái vật, hoặc None nếu type không hợp lệ
-        """
         cls = self._monster_classes.get(monster_type)
         if cls:
-            return cls(x, y,
-                       screen_width=self._screen_width,
-                       screen_height=self._screen_height)
+            return cls(
+                x,
+                y,
+                screen_width=self._screen_width,
+                screen_height=self._screen_height,
+            )
         return None
 
     def create_random_monster(self, x: float, y: float, level: int):
-        """
-        Tạo quái vật ngẫu nhiên, xác suất phụ thuộc vào level.
-        Level cao hơn → xác suất quái tầm xa tăng (tối đa 60%).
-
-        Args:
-            x, y: Vị trí spawn
-            level: Level hiện tại
-
-        Returns:
-            Đối tượng quái vật ngẫu nhiên
-        """
         ranged_chance = min(0.6, 0.2 + (level - 1) * 0.05)
-
         if random.random() < ranged_chance:
             return self.create_monster("ranged", x, y)
-        else:
-            return self.create_monster("melee", x, y)
+        return self.create_monster("melee", x, y)
 
     @property
     def registered_types(self) -> list:
-        """Trả về danh sách các loại quái đã đăng ký"""
         return list(self._monster_classes.keys())
 
-    # === SPAWN LOGIC ===
-
     def get_enemy_count(self, level: int) -> int:
-        """
-        Tính số lượng quái dựa trên level.
-
-        Args:
-            level: Level hiện tại
-
-        Returns:
-            Số lượng quái cần spawn
-        """
         return Settings.BASE_ENEMY_COUNT + (level - 1) * Settings.ENEMY_INCREASE_PER_LEVEL
 
-    def get_spawn_position(self, target_x: float, target_y: float,
-                           existing_positions: list = None) -> tuple:
-        """
-        Tạo vị trí spawn ngẫu nhiên, đảm bảo:
-        - Không quá gần target
-        - Không quá gần quái đã spawn
-        Bug #3 đã sửa: Fallback spawn ở các góc khác nhau.
-
-        Args:
-            target_x, target_y: Vị trí mục tiêu cần tránh
-            existing_positions: Danh sách vị trí quái đã spawn
-
-        Returns:
-            Tuple (x, y) vị trí spawn
-        """
+    def get_spawn_position(
+        self,
+        target_x: float,
+        target_y: float,
+        existing_positions: List[Tuple[float, float]] = None,
+    ) -> tuple:
         if existing_positions is None:
             existing_positions = []
 
@@ -155,7 +104,6 @@ class MonsterSpawner:
             if not too_close:
                 return (x, y)
 
-        # === BUG #3 FIX: Fallback spawn ở các góc khác nhau ===
         corner = self._FALLBACK_CORNERS[self._fallback_index % len(self._FALLBACK_CORNERS)]
         self._fallback_index += 1
 
@@ -164,33 +112,22 @@ class MonsterSpawner:
 
         if corner == "top_left":
             return (margin + offset_x, margin + offset_y)
-        elif corner == "top_right":
+        if corner == "top_right":
             return (self._screen_width - margin - offset_x, margin + offset_y)
-        elif corner == "bottom_left":
+        if corner == "bottom_left":
             return (margin + offset_x, self._screen_height - margin - offset_y)
-        else:
-            return (self._screen_width - margin - offset_x,
-                    self._screen_height - margin - offset_y)
+        return (
+            self._screen_width - margin - offset_x,
+            self._screen_height - margin - offset_y,
+        )
 
-    def spawn_wave(self, level: int,
-                   target_x: float, target_y: float) -> list:
-        """
-        Spawn một wave quái cho level hiện tại.
-
-        Args:
-            level: Level hiện tại
-            target_x, target_y: Vị trí target cần tránh khi spawn
-
-        Returns:
-            Danh sách quái vật đã spawn
-        """
+    def spawn_wave(self, level: int, target_x: float, target_y: float) -> list:
         enemy_count = self.get_enemy_count(level)
         monsters = []
         existing_positions = []
 
         for _ in range(enemy_count):
-            x, y = self.get_spawn_position(target_x, target_y,
-                                           existing_positions)
+            x, y = self.get_spawn_position(target_x, target_y, existing_positions)
             monster = self.create_random_monster(x, y, level)
             if monster:
                 monsters.append(monster)
@@ -199,5 +136,4 @@ class MonsterSpawner:
         return monsters
 
     def reset_fallback(self):
-        """Reset index fallback về 0"""
         self._fallback_index = 0

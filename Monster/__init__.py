@@ -1,31 +1,31 @@
-# MonsterCombat Package - Cơ chế Combat của Quái
-"""
-Package chứa toàn bộ cơ chế combat của quái vật.
-Phần của: Thanh (Combat của quái)
+"""Monster package.
 
-Cấu trúc Package theo mô hình OOP:
-    MonsterCombat/
-    ├── __init__.py          ← File này
-    ├── Entity/              ← Sub-Package: Base class
-    │   └── base.py          ← Lớp Entity (base class)
-    ├── Monster/             ← Sub-Package: Các loại quái
-    │   ├── base.py          ← Lớp Monster (kế thừa Entity)
-    │   ├── melee.py         ← MeleeMonster (cận chiến)
-    │   └── ranged.py        ← RangedMonster (tầm xa)
-    ├── Combat/              ← Sub-Package: Cơ chế chiến đấu
-    │   ├── projectile.py    ← Đạn ma thuật
-    │   └── spawner.py       ← Spawn + Factory Pattern
-    └── Config/              ← Sub-Package: Cấu hình
-        └── settings.py      ← Hằng số, màu sắc
+Canonical OOP monster module for the game.
 
-OOP Principles:
-    - Kế thừa (Inheritance):     Entity → Monster → MeleeMonster/RangedMonster
-    - Đóng gói (Encapsulation):  _private attributes + @property
-    - Đa hình (Polymorphism):    attack(), move_towards(), draw()
-    - Trừu tượng (Abstraction):  Monster.attack() abstract-like
-    - Factory Pattern:           MonsterSpawner.create_monster()
+Exports the public classes so other modules can import from ``monster``
+instead of reaching into the internal sub-packages.
 """
 
-__version__ = "1.0.0"
+from .Entity.base import Entity
+from .Monster.base import Monster
+from .Monster.melee import MeleeMonster
+from .Monster.ranged import RangedMonster
+from .Combat.projectile import Projectile
+from .Combat.spawner import MonsterSpawner
+from .Config.settings import Colors, Settings, MonsterConfig
+
+__all__ = [
+    "Entity",
+    "Monster",
+    "MeleeMonster",
+    "RangedMonster",
+    "Projectile",
+    "MonsterSpawner",
+    "Colors",
+    "Settings",
+    "MonsterConfig",
+]
+
+__version__ = "1.1.0"
 __author__ = "Thanh"
-__part__ = "Combat của quái"
+__part__ = "Combat cua quai"

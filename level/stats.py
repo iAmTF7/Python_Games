@@ -1,32 +1,152 @@
-def upgrade_hp(player):
+"""Object-oriented stat upgrade module.
 
-    if player.stat_points > 0:
+This keeps the original mechanics intact:
+- A stat can only be upgraded when ``player.stat_points > 0``.
+- HP upgrade: ``max_hp += 20``, ``hp = max_hp``, spend 1 point.
+- Damage upgrade: ``damage += 5``, spend 1 point.
+- Speed upgrade: ``speed += 0.5``, spend 1 point.
+- Armor upgrade: ``max_armor += 10``, ``armor = max_armor``, spend 1 point.
 
-        player.max_hp += 20
+The old functions still exist for compatibility:
+``upgrade_hp``, ``upgrade_damage``, ``upgrade_speed``, and ``upgrade_armor``.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Dict, Iterable, Optional
+
+
+@dataclass(frozen=True)
+class StatUpgrade:
+    """Base class for a stat upgrade."""
+
+    name: str
+    cost: int = 1
+
+    def can_apply(self, player: Any) -> bool:
+        return player.stat_points >= self.cost
+
+    def apply(self, player: Any) -> bool:
+        """Apply the upgrade if the player can afford it.
+
+        Returns True when the upgrade was applied, otherwise False.
+        """
+        if not self.can_apply(player):
+            return False
+
+        self.apply_effect(player)
+        player.stat_points -= self.cost
+        return True
+
+    def apply_effect(self, player: Any) -> None:
+        raise NotImplementedError("StatUpgrade subclasses must implement apply_effect().")
+
+
+@dataclass(frozen=True)
+class HpUpgrade(StatUpgrade):
+    name: str = "hp"
+    amount: int = 20
+
+    def apply_effect(self, player: Any) -> None:
+        player.max_hp += self.amount
         player.hp = player.max_hp
-        player.stat_points -= 1
 
 
-def upgrade_damage(player):
+@dataclass(frozen=True)
+class DamageUpgrade(StatUpgrade):
+    name: str = "damage"
+    amount: int = 5
 
-    if player.stat_points > 0:
-
-        player.damage += 5
-        player.stat_points -= 1
-
-
-def upgrade_speed(player):
-
-    if player.stat_points > 0:
-
-        player.speed += 0.5
-        player.stat_points -= 1
+    def apply_effect(self, player: Any) -> None:
+        player.damage += self.amount
 
 
-def upgrade_armor(player):
+@dataclass(frozen=True)
+class SpeedUpgrade(StatUpgrade):
+    name: str = "speed"
+    amount: float = 0.5
 
-    if player.stat_points > 0:
+    def apply_effect(self, player: Any) -> None:
+        player.speed += self.amount
 
-        player.max_armor += 10
+
+@dataclass(frozen=True)
+class ArmorUpgrade(StatUpgrade):
+    name: str = "armor"
+    amount: int = 10
+
+    def apply_effect(self, player: Any) -> None:
+        player.max_armor += self.amount
         player.armor = player.max_armor
-        player.stat_points -= 1
+
+
+class StatUpgradeSystem:
+    """Owns player stat upgrades."""
+
+    def __init__(self, player: Any, upgrades: Optional[Iterable[StatUpgrade]] = None):
+        self.player = player
+        self.upgrades: Dict[str, StatUpgrade] = {}
+
+        for upgrade in upgrades or self.default_upgrades():
+            self.register(upgrade)
+
+    @staticmethod
+    def default_upgrades() -> tuple[StatUpgrade, ...]:
+        return (
+            HpUpgrade(),
+            DamageUpgrade(),
+            SpeedUpgrade(),
+            ArmorUpgrade(),
+        )
+
+    def bind_player(self, player: Any) -> None:
+        self.player = player
+
+    def register(self, upgrade: StatUpgrade) -> None:
+        self.upgrades[upgrade.name] = upgrade
+
+    def upgrade(self, stat_name: str) -> bool:
+        try:
+            upgrade = self.upgrades[stat_name]
+        except KeyError as exc:
+            available = ", ".join(sorted(self.upgrades))
+            raise ValueError(f"Unknown stat upgrade '{stat_name}'. Available: {available}") from exc
+
+        return upgrade.apply(self.player)
+
+    def upgrade_hp(self) -> bool:
+        return self.upgrade("hp")
+
+    def upgrade_damage(self) -> bool:
+        return self.upgrade("damage")
+
+    def upgrade_speed(self) -> bool:
+        return self.upgrade("speed")
+
+    def upgrade_armor(self) -> bool:
+        return self.upgrade("armor")
+
+    def update(self, state: Any = None) -> None:
+        """Compatibility hook for the shared system architecture."""
+        return None
+
+
+def upgrade_hp(player: Any) -> None:
+    """Backward-compatible HP upgrade function."""
+    StatUpgradeSystem(player).upgrade_hp()
+
+
+def upgrade_damage(player: Any) -> None:
+    """Backward-compatible damage upgrade function."""
+    StatUpgradeSystem(player).upgrade_damage()
+
+
+def upgrade_speed(player: Any) -> None:
+    """Backward-compatible speed upgrade function."""
+    StatUpgradeSystem(player).upgrade_speed()
+
+
+def upgrade_armor(player: Any) -> None:
+    """Backward-compatible armor upgrade function."""
+    StatUpgradeSystem(player).upgrade_armor()

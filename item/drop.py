@@ -1,58 +1,88 @@
+"""Object-oriented item drop and pickup system.
+
+The old public functions are still present:
+- ``create_drop(player)``
+- ``pickup_item(player, item)``
+
+Internally, they now delegate to objects so the module can plug into the shared
+baseline architecture cleanly.
+"""
+
+from __future__ import annotations
+
 import random
-from .item import Item
+from typing import Any, Protocol
+
+try:
+    from game.base_system import BaseSystem
+except ModuleNotFoundError:  # Allows this module to be tested standalone.
+    class BaseSystem:  # type: ignore[no-redef]
+        pass
+
+from .item import Item, RandomLike
 
 
-def create_drop(player):
+class DropTable:
+    """Rolls item drops using the original 60% drop chance."""
 
-    if random.random() < 0.6:
-        return Item(player)
+    def __init__(self, drop_chance: float = 0.6, rng: RandomLike | None = None) -> None:
+        self.drop_chance = drop_chance
+        self.rng: RandomLike = rng or random
 
-    return None
+    def roll(self, player: Any) -> Item | None:
+        if self.rng.random() < self.drop_chance:
+            return Item.random_for_player(player, rng=self.rng)
+
+        return None
 
 
-def pickup_item(player, item):
+class ItemPickupSystem(BaseSystem):
+    """Applies item effects and can be registered as a game system later."""
 
-    if item is None:
-        return
+    def pickup(self, player: Any, item: Item | None) -> None:
+        if item is None:
+            return
 
-    if item.type == "heal":
+        item.apply_to(player)
 
-        player.hp = min(
-            player.max_hp,
-            player.hp + 20
-        )
+    def handle_event(self, event: Any, state: Any) -> None:
+        pass
 
-    elif item.type == "armor":
+    def update(self, state: Any) -> None:
+        """Optional GameState integration.
 
-        player.armor = min(
-            player.max_armor,
-            player.armor + 20
-        )
+        If items have ``rect`` attributes and the player has a ``rect``, this
+        will pick up colliding items. If not, it safely does nothing, so the old
+        manual ``pickup_item(player, item)`` flow still works.
+        """
+        player = getattr(state, "player", None)
+        items = getattr(state, "items", None)
 
-    elif item.type == "energy":
+        if player is None or items is None or not hasattr(player, "rect"):
+            return
 
-        player.energy = min(
-            player.max_energy,
-            player.energy + 30
-        )
+        for item in list(items):
+            item_rect = getattr(item, "rect", None)
+            if item_rect is None:
+                continue
 
-    elif item.type == "regen_hp":
+            if player.rect.colliderect(item_rect):
+                self.pickup(player, item)
+                items.remove(item)
 
-        if item.type not in player.special_items:
+    def draw(self, surface: Any, state: Any) -> None:
+        pass
 
-            player.hp_regen = 0.2
-            player.special_items.append(item.type)
 
-    elif item.type == "regen_armor":
+DEFAULT_DROP_TABLE = DropTable()
+DEFAULT_PICKUP_SYSTEM = ItemPickupSystem()
 
-        if item.type not in player.special_items:
 
-            player.armor_regen = 0.2
-            player.special_items.append(item.type)
+def create_drop(player: Any) -> Item | None:
+    """Backward-compatible wrapper for old code."""
+    return DEFAULT_DROP_TABLE.roll(player)
 
-    elif item.type == "regen_energy":
 
-        if item.type not in player.special_items:
-
-            player.energy_regen = 0.25
-            player.special_items.append(item.type)
+def pickup_item(player: Any, item: Item | None) -> None:
+    """Backward-compatible wrapper for old code."""
+    DEFAULT_PICKUP_SYSTEM.pickup(player, item)
