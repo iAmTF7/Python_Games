@@ -105,6 +105,7 @@ class IntegratedDebugGame:
             wave_level,
             self.player.x,
             self.player.y,
+            self.tile_map,
         )
         self.log(f"Spawned {len(self.state.monsters)} monsters for map level {wave_level}")
 
@@ -274,8 +275,8 @@ class IntegratedDebugGame:
         for monster in list(self.state.monsters):
             if not monster.is_alive():
                 continue
-            monster.update(self.player, self.state.projectiles)
-            monster.separate_from_others(self.state.monsters)
+            monster.update(self.player, self.state.projectiles, self.tile_map)
+            monster.separate_from_others(self.state.monsters, self.tile_map)
 
         self.state.monsters = [monster for monster in self.state.monsters if monster.is_alive()]
 
