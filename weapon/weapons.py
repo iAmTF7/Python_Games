@@ -1,28 +1,11 @@
-"""Object-oriented weapon system with legacy-compatible module functions.
-
-This file keeps the original public API used by the old demo:
-
-    import weapons
-    weapons.weapon()
-    weapons.equip(index)
-    weapons.use_weapon(...)
-    weapons.update(...)
-    weapons.draw_weapon_icon(...)
-    weapons.draw_attacks(...)
-    weapons.draw_projectiles(...)
-    weapons.draw_weapon_list(...)
-
-Internally, the old global procedural state has been moved into WeaponSystem,
-weapon classes, attack-effect classes, and projectile classes.  The gameplay
-numbers and mechanics are intentionally preserved from the original module.
-"""
+"""Object-oriented weapon system with legacy-compatible module functions."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 import math
 import random
-from typing import Callable, Iterable, Optional
+from typing import Callable
 
 import pygame
 
@@ -152,7 +135,6 @@ def normalized_direction(direction):
 
 
 def entity_rect(entity):
-    """Return a pygame.Rect from either a Rect, dict, or object entity."""
     if isinstance(entity, pygame.Rect):
         return entity
 
@@ -753,33 +735,51 @@ class FlagSwingEffect:
     timer: int = 12
     has_hit_enemy: bool = False
     polygon: list = field(default_factory=list)
+    target_polygon: list = field(default_factory=list)
 
     def update_timer(self):
         self.timer -= 1
         return self.timer > 0
 
     def set_direction(self, direction):
-        if direction.length() > 0:
-            self.direction = pygame.Vector2(direction.x, direction.y)
+        return
+
+    def progress(self):
+        return 1 - self.timer / self.duration
 
     def angle(self):
-        progress = 1 - self.timer / self.duration
+        return self.swing_angle()
+
+    def attack_direction(self):
+        d = pygame.Vector2(self.direction.x, self.direction.y)
+
+        if d.length() == 0:
+            d = pygame.Vector2(0, 1)
+
+        return d.normalize()
+
+    def swing_angle(self):
+        progress = self.progress()
         start_angle = -45 * self.side
         end_angle = 45 * self.side
         return start_angle + (end_angle - start_angle) * progress
 
-    def build_polygon(self, player):
-        d = pygame.Vector2(self.direction.x, self.direction.y)
-        if d.length() == 0:
-            d = pygame.Vector2(0, 1)
-        d = d.normalize()
+    def current_direction(self):
+        base = self.attack_direction()
+        rotated = rotate(base, math.radians(self.swing_angle()))
 
+        if rotated.length() == 0:
+            return pygame.Vector2(0, 1)
+
+        return rotated.normalize()
+
+    def build_target_polygon(self, player):
         center = player_center(player)
-        start_angle = -45 * self.side
-        current_angle = self.angle()
+        base = self.attack_direction()
 
-        inner = 22
-        outer = 95
+        inner = 18
+        outer = 102
+        half_arc = 45
         steps = 18
 
         outer_points = []
@@ -787,10 +787,38 @@ class FlagSwingEffect:
 
         for i in range(steps + 1):
             t = i / steps
-            angle = start_angle + (current_angle - start_angle) * t
-            rotated = rotate(d, math.radians(angle))
+            angle = -half_arc + half_arc * 2 * t
+            rotated = rotate(base, math.radians(angle))
+
             outer_point = center + rotated * outer
             inner_point = center + rotated * inner
+
+            outer_points.append((int(outer_point.x), int(outer_point.y)))
+            inner_points.append((int(inner_point.x), int(inner_point.y)))
+
+        self.target_polygon = outer_points + inner_points[::-1]
+        return self.target_polygon
+
+    def build_polygon(self, player):
+        center = player_center(player)
+        forward = self.current_direction()
+
+        inner = 20
+        outer = 95
+        half_arc = 16
+        steps = 10
+
+        outer_points = []
+        inner_points = []
+
+        for i in range(steps + 1):
+            t = i / steps
+            angle = -half_arc + half_arc * 2 * t
+            rotated = rotate(forward, math.radians(angle))
+
+            outer_point = center + rotated * outer
+            inner_point = center + rotated * inner
+
             outer_points.append((int(outer_point.x), int(outer_point.y)))
             inner_points.append((int(inner_point.x), int(inner_point.y)))
 
@@ -805,17 +833,87 @@ class FlagSwingEffect:
 
         for monster in monsters:
             rect = entity_rect(monster)
+
             if monster_alive(monster) and rect_hits_polygon(rect, self.polygon):
                 damage_monster(monster, damage)
                 self.has_hit_enemy = True
                 break
 
-    def draw_fan(self, screen, player):
-        polygon = self.build_polygon(player)
+    def draw_target_indicator(self, screen, player):
+        polygon = self.build_target_polygon(player)
+
         if len(polygon) < 3:
             return
+
+        center = player_center(player)
+        base = self.attack_direction()
+
+        outer = 102
+        left = rotate(base, math.radians(-45))
+        right = rotate(base, math.radians(45))
+
+        p_left = center + left * outer
+        p_right = center + right * outer
+        p_mid = center + base * outer
+
+        pygame.draw.line(
+            screen,
+            WHITE,
+            (int(center.x), int(center.y)),
+            (int(p_left.x), int(p_left.y)),
+            1,
+        )
+
+        pygame.draw.line(
+            screen,
+            WHITE,
+            (int(center.x), int(center.y)),
+            (int(p_right.x), int(p_right.y)),
+            1,
+        )
+
+        pygame.draw.line(
+            screen,
+            FLAG_LIGHT,
+            (int(center.x), int(center.y)),
+            (int(p_mid.x), int(p_mid.y)),
+            2,
+        )
+
+        pygame.draw.lines(screen, WHITE, True, polygon, 1)
+
+    def draw_fan(self, screen, player):
+        polygon = self.build_polygon(player)
+
+        if len(polygon) < 3:
+            return
+
         pygame.draw.polygon(screen, FLAG_DARK, polygon)
         pygame.draw.lines(screen, FLAG_LIGHT, True, polygon, 3)
+
+        center = player_center(player)
+        forward = self.current_direction()
+
+        inner = 20
+        outer = 95
+        half_arc = 16
+        ribs = 3
+
+        for i in range(ribs + 1):
+            t = i / ribs
+            angle = -half_arc + half_arc * 2 * t
+            rotated = rotate(forward, math.radians(angle))
+
+            p1 = center + rotated * inner
+            p2 = center + rotated * outer
+
+            pygame.draw.line(
+                screen,
+                FLAG_LIGHT,
+                (int(p1.x), int(p1.y)),
+                (int(p2.x), int(p2.y)),
+                2,
+            )
 
     def draw_hitbox(self, screen):
         if len(self.polygon) >= 3:
@@ -847,7 +945,6 @@ class BaseWeapon:
 
     @property
     def energy_cost(self):
-        """Energy is ammo, so only ranged-style weapons spend it."""
         if "energy_cost" in self.data:
             return self.data["energy_cost"]
         if self.weapon_type in ENERGY_AMMO_WEAPON_TYPES:
@@ -865,6 +962,7 @@ class BaseWeapon:
 
         if getattr(context.player, "energy", 0) < cost:
             return False
+
         context.player.energy -= cost
         return True
 
@@ -907,18 +1005,62 @@ class GunWeapon(BaseWeapon):
         if system.shoot_timer <= 0:
             if not self.try_spend_energy(context):
                 return
-            system.bullets.append(BulletProjectile.create(
-                context.player,
-                context.player_direction,
-                damage=self.data["damage"],
-                size=self.data["size"],
-                speed=system.bullet_speed,
-            ))
+
+            system.bullets.append(
+                BulletProjectile.create(
+                    context.player,
+                    context.player_direction,
+                    damage=self.data["damage"],
+                    size=self.data["size"],
+                    speed=system.bullet_speed,
+                )
+            )
             system.shoot_timer = self.cooldown
 
     def draw_icon(self, system, screen, player, player_direction):
         rect = entity_rect(player)
-        pygame.draw.rect(screen, ORANGE, (rect.centerx - 8, rect.centery - 8, 16, 16))
+        d = normalized_direction(player_direction)
+
+        center = pygame.Vector2(rect.centerx, rect.centery)
+        side = pygame.Vector2(-d.y, d.x)
+
+        gun_center = center + d * 18
+        barrel_start = gun_center - d * 5
+        barrel_end = gun_center + d * 30
+
+        handle_start = gun_center - side * 5
+        handle_end = handle_start - d * 11 + side * 8
+
+        pygame.draw.line(
+            screen,
+            ORANGE,
+            (int(barrel_start.x), int(barrel_start.y)),
+            (int(barrel_end.x), int(barrel_end.y)),
+            7,
+        )
+
+        pygame.draw.line(
+            screen,
+            WHITE,
+            (int(gun_center.x), int(gun_center.y)),
+            (int(barrel_end.x), int(barrel_end.y)),
+            2,
+        )
+
+        pygame.draw.line(
+            screen,
+            GRAY,
+            (int(handle_start.x), int(handle_start.y)),
+            (int(handle_end.x), int(handle_end.y)),
+            5,
+        )
+
+        pygame.draw.circle(
+            screen,
+            WHITE,
+            (int(barrel_end.x), int(barrel_end.y)),
+            3,
+        )
 
 
 class FlagWeapon(BaseWeapon):
@@ -927,17 +1069,25 @@ class FlagWeapon(BaseWeapon):
             return
 
         system.flag_side *= -1
+        locked_direction = pygame.Vector2(context.player_direction.x, context.player_direction.y)
+
+        if locked_direction.length() == 0:
+            locked_direction = pygame.Vector2(0, 1)
+
         system.flag_swing = FlagSwingEffect(
-            direction=pygame.Vector2(context.player_direction.x, context.player_direction.y),
+            direction=locked_direction.normalize(),
             side=system.flag_side,
             duration=system.flag_duration,
             timer=system.flag_duration,
         )
         system.flag_swing.build_polygon(context.player)
+        system.flag_swing.build_target_polygon(context.player)
+
+        system.flag_attack_direction = system.flag_swing.attack_direction()
         system.attack_cooldown_timer = self.cooldown
 
     def draw_icon(self, system, screen, player, player_direction):
-        draw_flag(screen, player, player_direction)
+        draw_flag(screen, player, player_direction, system=system)
 
 
 class SpearWeapon(BaseWeapon):
@@ -945,6 +1095,7 @@ class SpearWeapon(BaseWeapon):
         if system.attack_cooldown_timer <= 0:
             if not self.try_spend_energy(context):
                 return
+
             system.spears.append(SpearProjectile.create(context.player, context.player_direction, self.data))
             system.attack_cooldown_timer = self.cooldown
 
@@ -987,6 +1138,7 @@ class BoomerangWeapon(BaseWeapon):
         if system.attack_cooldown_timer <= 0:
             if not self.try_spend_energy(context):
                 return
+
             system.boomerangs.append(BoomerangProjectile.create(context.player, context.player_direction, self.data))
             system.attack_cooldown_timer = self.cooldown
 
@@ -1005,15 +1157,75 @@ class BoomerangWeapon(BaseWeapon):
 class EarthshakerWeapon(BaseWeapon):
     def use(self, system, context):
         if system.attack_cooldown_timer <= 0:
-            system.shockwaves.append(ShockwaveEffect.create(context.player, self.data))
+            d = context.direction
+            player_pos = player_center(context.player)
+
+            # Tâm nổ nằm ở đầu búa, phía trước player.
+            hammer_tip_distance = 85
+            impact_pos = player_pos + d * hammer_tip_distance
+
+            # Giữ tâm nổ trong màn hình.
+            impact_pos.x = max(
+                context.screen_rect.left,
+                min(context.screen_rect.right, impact_pos.x),
+            )
+            impact_pos.y = max(
+                context.screen_rect.top,
+                min(context.screen_rect.bottom, impact_pos.y),
+            )
+
+            system.shockwaves.append(
+                ShockwaveEffect(
+                    pos=pygame.Vector2(impact_pos.x, impact_pos.y),
+                    current_radius=10,
+                    max_radius=self.data["max_radius"],
+                    expansion_speed=self.data["expansion_speed"],
+                    damage=self.data["damage"],
+                    knockback=self.data["knockback"],
+                )
+            )
+
             system.attack_cooldown_timer = self.cooldown
 
     def draw_icon(self, system, screen, player, player_direction):
         rect = entity_rect(player)
         d = normalized_direction(player_direction)
-        head_center = (rect.centerx + int(d.x * 25), rect.centery + int(d.y * 25))
-        pygame.draw.line(screen, BROWN, rect.center, head_center, 4)
-        pygame.draw.rect(screen, GRAY, (head_center[0] - 10, head_center[1] - 10, 20, 20))
+
+        # Búa dài hơn bản gốc.
+        start = pygame.Vector2(rect.centerx, rect.centery)
+        end = start + d * 70
+        head_center = start + d * 85
+
+        pygame.draw.line(
+            screen,
+            BROWN,
+            (int(start.x), int(start.y)),
+            (int(end.x), int(end.y)),
+            6,
+        )
+
+        pygame.draw.rect(
+            screen,
+            GRAY,
+            (
+                int(head_center.x) - 14,
+                int(head_center.y) - 14,
+                28,
+                28,
+            ),
+        )
+
+        pygame.draw.rect(
+            screen,
+            WHITE,
+            (
+                int(head_center.x) - 14,
+                int(head_center.y) - 14,
+                28,
+                28,
+            ),
+            2,
+        )
 
 
 # =========================
@@ -1054,22 +1266,32 @@ class WeaponSystem:
         self.flag_wave = 0
         self.flag_attack_direction = pygame.Vector2(0, 1)
 
+        self.last_player = None
+
     def _make_weapon(self, data):
         name = data["name"]
+
         if name == "Sword":
             return SwordWeapon(data)
+
         if name == "Gun":
             return GunWeapon(data)
+
         if name == "Flag":
             return FlagWeapon(data)
+
         if name == "Spear":
             return SpearWeapon(data)
+
         if name == "Dual Blades":
             return DualBladesWeapon(data)
+
         if name == "Boomerang":
             return BoomerangWeapon(data)
+
         if name == "Earthshaker":
             return EarthshakerWeapon(data)
+
         return BaseWeapon(data)
 
     @property
@@ -1082,15 +1304,20 @@ class WeaponSystem:
     def equip(self, index):
         if not self.weapon_objects:
             return
+
         self.current_weapon = index % len(self.weapon_objects)
         self.selected_weapon = self.current_weapon
 
     def set_flag_direction(self, direction):
-        if self.flag_swing is not None and direction.length() > 0:
-            self.flag_swing.set_direction(direction)
-            self.flag_attack_direction = pygame.Vector2(direction.x, direction.y)
+        if self.flag_swing is not None:
+            return
+
+        if direction.length() > 0:
+            self.flag_attack_direction = pygame.Vector2(direction.x, direction.y).normalize()
 
     def use_weapon(self, player, player_direction, monsters, damage_monster, screen_rect, width, height):
+        self.last_player = player
+
         context = WeaponUseContext(
             player=player,
             player_direction=player_direction,
@@ -1103,6 +1330,7 @@ class WeaponSystem:
         self.current.use(self, context)
 
     def update(self, player, player_direction, monsters, damage_monster, screen_rect):
+        self.last_player = player
         self.flag_wave += 1
 
         if self.sword_slash is not None and not self.sword_slash.update():
@@ -1112,16 +1340,11 @@ class WeaponSystem:
             self.dash_slash = None
 
         if self.flag_swing is not None:
-            # Preserve the original timing: flag_timer is decremented before
-            # the hitbox is rebuilt and tested.
             if not self.flag_swing.update_timer():
                 self.flag_swing = None
             elif self.current.name == "Flag":
                 self.flag_swing.update_hitbox(player, monsters, damage_monster, self.current.data["damage"])
-                self.flag_attack_direction = pygame.Vector2(
-                    self.flag_swing.direction.x,
-                    self.flag_swing.direction.y,
-                )
+                self.flag_attack_direction = self.flag_swing.attack_direction()
 
         if self.shoot_timer > 0:
             self.shoot_timer -= 1
@@ -1133,26 +1356,31 @@ class WeaponSystem:
             self.spear_splash = None
 
         self.bullets = [
-            bullet for bullet in self.bullets
+            bullet
+            for bullet in self.bullets
             if bullet.update(monsters, damage_monster, screen_rect)
         ]
 
         self.spears = [
-            spear for spear in self.spears
+            spear
+            for spear in self.spears
             if spear.update(self, monsters, damage_monster, screen_rect)
         ]
 
         self.boomerangs = [
-            b for b in self.boomerangs
-            if b.update(player, monsters, damage_monster)
+            boomerang
+            for boomerang in self.boomerangs
+            if boomerang.update(player, monsters, damage_monster)
         ]
 
         self.shockwaves = [
-            wave for wave in self.shockwaves
+            wave
+            for wave in self.shockwaves
             if wave.update(monsters, damage_monster, screen_rect)
         ]
 
     def draw_weapon_icon(self, screen, player, player_direction):
+        self.last_player = player
         self.current.draw_icon(self, screen, player, player_direction)
 
     def draw_attacks(self, screen, show_hitbox):
@@ -1161,8 +1389,13 @@ class WeaponSystem:
             return
 
         if self.flag_swing is not None and self.current.name == "Flag":
+            if self.last_player is not None:
+                self.flag_swing.draw_target_indicator(screen, self.last_player)
+                self.flag_swing.draw_fan(screen, self.last_player)
+
             if show_hitbox:
                 self.flag_swing.draw_hitbox(screen)
+
             return
 
         if self.sword_slash is not None and self.current.name == "Sword":
@@ -1175,8 +1408,8 @@ class WeaponSystem:
         for spear in self.spears:
             spear.draw(screen, show_hitbox)
 
-        for b in self.boomerangs:
-            b.draw(screen, show_hitbox)
+        for boomerang in self.boomerangs:
+            boomerang.draw(screen, show_hitbox)
 
         for wave in self.shockwaves:
             wave.draw(screen, show_hitbox)
@@ -1197,7 +1430,7 @@ class WeaponSystem:
         screen.blit(title, (x + 185, y + 20))
         screen.blit(guide, (x + 65, y + 55))
 
-        for i, w in enumerate(self.weapons):
+        for i, weapon_data in enumerate(self.weapons):
             rect = pygame.Rect(x + 40, y + 90 + i * 55, 440, 48)
 
             if i == self.selected_weapon:
@@ -1206,13 +1439,13 @@ class WeaponSystem:
             else:
                 pygame.draw.rect(screen, (65, 65, 65), rect)
 
-            text = w["name"]
+            text = weapon_data["name"]
             if i == self.current_weapon:
                 text += " [EQUIPPED]"
 
-            name_text = font.render(text, True, w["color"])
+            name_text = font.render(text, True, weapon_data["color"])
             info_text = small_font.render(
-                "Type: " + w["type"] + " | Damage: " + get_weapon_damage_text(w),
+                "Type: " + weapon_data["type"] + " | Damage: " + get_weapon_damage_text(weapon_data),
                 True,
                 WHITE,
             )
@@ -1254,13 +1487,17 @@ def update_flag_hitbox(player, monsters, damage_monster):
     if system.flag_swing is None:
         system.flag_attack_direction = pygame.Vector2(0, 1)
         return
+
     if system.current.name != "Flag":
         return
+
     system.flag_swing.update_hitbox(player, monsters, damage_monster, system.current.data["damage"])
 
 
-def draw_flag_cloth(screen, px, py, direction):
-    system = _active_system()
+def draw_flag_cloth(screen, px, py, direction, flag_wave=None):
+    if flag_wave is None:
+        flag_wave = _active_system().flag_wave
+
     d = normalized_direction(direction)
     side = pygame.Vector2(-d.y, d.x)
 
@@ -1274,7 +1511,7 @@ def draw_flag_cloth(screen, px, py, direction):
 
     for i in range(segments + 1):
         t = i / segments
-        wave = math.sin(system.flag_wave * 0.22 + t * math.pi * 2.2) * power * t
+        wave = math.sin(flag_wave * 0.22 + t * math.pi * 2.2) * power * t
 
         cx = px + side.x * length * t + d.x * wave
         cy = py + side.y * length * t + d.y * wave
@@ -1288,25 +1525,37 @@ def draw_flag_cloth(screen, px, py, direction):
     pygame.draw.lines(screen, WHITE, True, points, 2)
 
 
-def draw_flag(screen, player, player_direction):
-    system = _active_system()
+def draw_flag(screen, player, player_direction, system=None):
+    if system is None:
+        system = _active_system()
+
     rect = entity_rect(player)
 
     if system.flag_swing is not None:
-        d = pygame.Vector2(system.flag_swing.direction.x, system.flag_swing.direction.y)
+        d = system.flag_swing.current_direction()
     else:
         d = pygame.Vector2(player_direction.x, player_direction.y)
+        d = normalized_direction(d)
 
-    d = normalized_direction(d)
+    start = pygame.Vector2(rect.centerx, rect.centery)
+    end = start + d * 52
 
-    if system.flag_swing is not None:
-        d = rotate(d, math.radians(system.flag_swing.angle()))
+    pygame.draw.line(
+        screen,
+        BROWN,
+        rect.center,
+        (int(end.x), int(end.y)),
+        6,
+    )
 
-    end = pygame.Vector2(rect.centerx, rect.centery) + d * 52
+    pygame.draw.circle(
+        screen,
+        LIGHT_GRAY,
+        (int(end.x), int(end.y)),
+        7,
+    )
 
-    pygame.draw.line(screen, BROWN, rect.center, (int(end.x), int(end.y)), 6)
-    pygame.draw.circle(screen, LIGHT_GRAY, (int(end.x), int(end.y)), 7)
-    draw_flag_cloth(screen, end.x, end.y, d)
+    draw_flag_cloth(screen, end.x, end.y, d, flag_wave=system.flag_wave)
 
 
 def draw_fan(screen, player):
@@ -1410,7 +1659,6 @@ def draw_dual_blades_in_hand(screen, player, player_direction):
 # =========================
 _default_system = WeaponSystem()
 
-# These module globals are preserved because main.py reads or writes them.
 weapons = _default_system.weapons
 current_weapon = _default_system.current_weapon
 selected_weapon = _default_system.selected_weapon
@@ -1535,7 +1783,7 @@ def _sync_exports_from_system():
         flag_swinging = True
         flag_timer = _default_system.flag_swing.timer
         flag_side = _default_system.flag_swing.side
-        flag_attack_direction = _default_system.flag_swing.direction
+        flag_attack_direction = _default_system.flag_swing.attack_direction()
         flag_has_hit_enemy = _default_system.flag_swing.has_hit_enemy
         flag_attack_polygon = _default_system.flag_swing.polygon
     else:
@@ -1546,7 +1794,12 @@ def _sync_exports_from_system():
         flag_attack_polygon = []
 
     flag_wave = _default_system.flag_wave
-    attacking = _default_system.sword_slash is not None or _default_system.dash_slash is not None or _default_system.flag_swing is not None
+    attacking = (
+        _default_system.sword_slash is not None
+        or _default_system.dash_slash is not None
+        or _default_system.flag_swing is not None
+    )
+
     if _default_system.sword_slash is not None:
         attack_timer = _default_system.sword_slash.timer
     elif _default_system.dash_slash is not None:
@@ -1580,7 +1833,13 @@ def set_flag_direction(direction):
 
 def make_bullet(player, player_direction):
     _sync_system_from_exports()
-    return BulletProjectile.create(player, player_direction, weapon()["damage"], size=bullet_size, speed=bullet_speed)
+    return BulletProjectile.create(
+        player,
+        player_direction,
+        weapon()["damage"],
+        size=bullet_size,
+        speed=bullet_speed,
+    )
 
 
 def make_spear(player, player_direction):
@@ -1595,13 +1854,27 @@ def make_boomerang(player, player_direction):
 
 def use_weapon(player, player_direction, monsters, damage_monster, screen_rect, width, height):
     _sync_system_from_exports()
-    _default_system.use_weapon(player, player_direction, monsters, damage_monster, screen_rect, width, height)
+    _default_system.use_weapon(
+        player,
+        player_direction,
+        monsters,
+        damage_monster,
+        screen_rect,
+        width,
+        height,
+    )
     _sync_exports_from_system()
 
 
 def update(player, player_direction, monsters, damage_monster, screen_rect):
     _sync_system_from_exports()
-    _default_system.update(player, player_direction, monsters, damage_monster, screen_rect)
+    _default_system.update(
+        player,
+        player_direction,
+        monsters,
+        damage_monster,
+        screen_rect,
+    )
     _sync_exports_from_system()
 
 
@@ -1636,5 +1909,4 @@ def projectile_count():
     return count
 
 
-# Initialize exported globals from the default system.
 _sync_exports_from_system()

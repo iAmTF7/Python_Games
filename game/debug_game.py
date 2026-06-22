@@ -26,7 +26,11 @@ from weapon import WeaponSystem
 
 HUD_WIDTH = 340
 FPS = 60
+
+WHITE = (255, 255, 255)
 PLAYER_COLOR = (0, 200, 255)
+INVINCIBLE_COLOR = (80, 255, 255)
+
 ITEM_COLORS = {
     "heal": (80, 230, 100),
     "armor": (100, 170, 255),
@@ -70,6 +74,12 @@ class IntegratedDebugGame:
         self.player = Player(width=32, height=32)
         self.tile_map.place_player_at_start(self.player)
 
+        # Bật/tắt bằng phím B.
+        # invincible_cheat = trạng thái debug/cheat.
+        # invincible = trạng thái thật để Player.take_damage() chặn damage.
+        self.player.invincible = False
+        self.player.invincible_cheat = False
+
         self.map_system = MapSystem(self.tile_map)
         self.weapon_system = WeaponSystem()
         self.item_pickup_system = ItemPickupSystem()
@@ -89,7 +99,7 @@ class IntegratedDebugGame:
         self.regen_timer = 0
 
         self.spawn_wave()
-        self.log("Debug ready: WASD move, mouse aim, click/space attack, F1 hitboxes")
+        self.log("Debug ready: WASD move, mouse aim, click/space attack, B immortal")
 
     # ------------------------------------------------------------------
     # Setup helpers
@@ -105,22 +115,53 @@ class IntegratedDebugGame:
             wave_level,
             self.player.x,
             self.player.y,
-            self.tile_map,
         )
         self.log(f"Spawned {len(self.state.monsters)} monsters for map level {wave_level}")
 
     def reset_debug_world(self) -> None:
         self.tile_map.load_level(0)
         self.tile_map.place_player_at_start(self.player)
+
         self.player.restore_full()
         self.player.exp = 0
         self.player.level = 1
         self.player.exp_need = 100
         self.player.stat_points = 0
+
+        # Reset bất tử.
+        self.player.invincible = False
+        self.player.invincible_cheat = False
+
+        if hasattr(self.weapon_system, "invincible_timer"):
+            self.weapon_system.invincible_timer = 0
+
         self.state.items.clear()
         self.state.score = 0
         self.spawn_wave()
         self.log("World reset")
+
+    # ------------------------------------------------------------------
+    # Invincible helpers
+    # ------------------------------------------------------------------
+    def toggle_invincible(self) -> None:
+        """Toggle permanent invincibility with the B key."""
+        self.player.invincible_cheat = not getattr(self.player, "invincible_cheat", False)
+
+        if self.player.invincible_cheat:
+            self.player.invincible = True
+            self.log("Invincible ON")
+        else:
+            self.player.invincible = False
+
+            if hasattr(self.weapon_system, "invincible_timer"):
+                self.weapon_system.invincible_timer = 0
+
+            self.log("Invincible OFF")
+
+    def apply_invincible_cheat(self) -> None:
+        """Keep debug invincibility enabled even if weapon timers update."""
+        if getattr(self.player, "invincible_cheat", False):
+            self.player.invincible = True
 
     # ------------------------------------------------------------------
     # Event/input
@@ -149,6 +190,8 @@ class IntegratedDebugGame:
         elif key == pygame.K_F1:
             self.state.debug = not self.state.debug
             self.log(f"Debug hitboxes: {self.state.debug}")
+        elif key == pygame.K_b:
+            self.toggle_invincible()
         elif key == pygame.K_r:
             self.reset_debug_world()
         elif key == pygame.K_m:
@@ -188,8 +231,10 @@ class IntegratedDebugGame:
         mx, my = pygame.mouse.get_pos()
         if not self.map_rect.collidepoint(mx, my):
             return
+
         dx = mx - self.player.x
         dy = my - self.player.y
+
         if dx or dy:
             self.player.set_direction(dx, dy)
 
@@ -199,6 +244,7 @@ class IntegratedDebugGame:
     def use_current_weapon(self) -> None:
         if self.state.paused or not self.player.is_alive():
             return
+
         self.weapon_system.use_weapon(
             self.player,
             self.player.direction,
@@ -211,6 +257,7 @@ class IntegratedDebugGame:
 
     def damage_monster(self, monster: Any, amount: int | float) -> None:
         was_alive = monster.is_alive() if hasattr(monster, "is_alive") else True
+
         if hasattr(monster, "take_damage"):
             monster.take_damage(int(amount))
         elif isinstance(monster, dict):
@@ -218,11 +265,13 @@ class IntegratedDebugGame:
             monster["alive"] = monster["hp"] > 0
 
         now_alive = monster.is_alive() if hasattr(monster, "is_alive") else monster.get("alive", False)
+
         if was_alive and not now_alive:
             self.on_monster_killed(monster)
 
     def on_monster_killed(self, monster: Any) -> None:
         self.state.score += 1
+
         if self.level_system.add_exp(25):
             self.log(f"Level up! Player level {self.player.level}")
 
@@ -246,8 +295,12 @@ class IntegratedDebugGame:
         keys = pygame.key.get_pressed()
         self.tile_map.update_player_from_keys(self.player, keys)
         self.update_mouse_aim()
+
         self.state.tile_map = self.tile_map
         self.state.level = self.tile_map.level + 1
+
+        # Giữ bất tử trước khi quái/projectile gây damage.
+        self.apply_invincible_cheat()
 
         # Hold mouse/space for repeated fire; weapon cooldowns control rate.
         mouse_buttons = pygame.mouse.get_pressed()
@@ -256,6 +309,7 @@ class IntegratedDebugGame:
 
         self.update_monsters()
         self.update_monster_projectiles()
+
         self.weapon_system.update(
             self.player,
             self.player.direction,
@@ -263,9 +317,15 @@ class IntegratedDebugGame:
             self.damage_monster,
             self.map_rect,
         )
+
+        # WeaponSystem có thể tắt invincible khi timer hết,
+        # nên nếu cheat B đang bật thì bật lại ngay.
+        self.apply_invincible_cheat()
+
         self.item_pickup_system.update(self.state)
         self.update_level_exit()
         self.update_player_timers()
+
         self.messages = [m for m in self.messages if m.tick()]
 
         if not self.state.monsters:
@@ -275,22 +335,32 @@ class IntegratedDebugGame:
         for monster in list(self.state.monsters):
             if not monster.is_alive():
                 continue
-            monster.update(self.player, self.state.projectiles, self.tile_map)
-            monster.separate_from_others(self.state.monsters, self.tile_map)
+
+            monster.update(self.player, self.state.projectiles)
+            monster.separate_from_others(self.state.monsters)
 
         self.state.monsters = [monster for monster in self.state.monsters if monster.is_alive()]
 
     def update_monster_projectiles(self) -> None:
         live_projectiles = []
+
         for projectile in self.state.projectiles:
             projectile.update()
+
             if projectile.is_out_of_bounds():
                 continue
+
             if projectile.check_hit(self.player):
-                self.player.take_damage(projectile.damage)
-                self.log(f"Player hit for {projectile.damage}", timer=70)
+                if getattr(self.player, "invincible", False):
+                    self.log("Blocked damage: invincible", timer=50)
+                else:
+                    self.player.take_damage(projectile.damage)
+                    self.log(f"Player hit for {projectile.damage}", timer=70)
+
                 continue
+
             live_projectiles.append(projectile)
+
         self.state.projectiles = live_projectiles
 
     def update_level_exit(self) -> None:
@@ -303,6 +373,7 @@ class IntegratedDebugGame:
 
     def update_player_timers(self) -> None:
         self.player.update()
+
         self.regen_timer += 1
         if self.regen_timer >= FPS:
             self.regen_timer = 0
@@ -313,14 +384,20 @@ class IntegratedDebugGame:
     # ------------------------------------------------------------------
     def draw(self) -> None:
         self.screen.fill((0, 0, 0))
+
         self.tile_map.draw(self.screen)
         self.draw_items()
         self.draw_monsters()
         self.draw_projectiles()
+
         self.weapon_system.draw_projectiles(self.screen, self.state.debug)
         self.weapon_system.draw_attacks(self.screen, self.state.debug)
+
         self.player.draw(self.screen, PLAYER_COLOR)
+        self.draw_invincible_effect()
+
         self.weapon_system.draw_weapon_icon(self.screen, self.player, self.player.direction)
+
         if self.weapon_system.weapon_list_open:
             self.weapon_system.draw_weapon_list(
                 self.screen,
@@ -329,36 +406,64 @@ class IntegratedDebugGame:
                 self.screen.get_width(),
                 self.screen.get_height(),
             )
+
         self.draw_hud()
         pygame.display.flip()
+
+    def draw_invincible_effect(self) -> None:
+        if not getattr(self.player, "invincible", False):
+            return
+
+        rect = self.player.get_rect()
+        radius = max(rect.width, rect.height) + 10
+
+        pygame.draw.circle(self.screen, INVINCIBLE_COLOR, rect.center, radius, 3)
+        pygame.draw.circle(self.screen, WHITE, rect.center, radius + 6, 1)
 
     def draw_items(self) -> None:
         for item in self.state.items:
             rect = getattr(item, "rect", None)
+
             if rect is None:
                 continue
+
             pygame.draw.rect(self.screen, ITEM_COLORS.get(item.type, (255, 255, 255)), rect)
+
             if self.state.debug:
-                pygame.draw.rect(self.screen, (255, 255, 255), rect, 1)
+                pygame.draw.rect(self.screen, WHITE, rect, 1)
 
     def draw_monsters(self) -> None:
         for monster in self.state.monsters:
             monster.draw(self.screen)
+
             if self.state.debug:
-                pygame.draw.rect(self.screen, (255, 255, 255), monster.get_rect(), 1)
+                pygame.draw.rect(self.screen, WHITE, monster.get_rect(), 1)
 
     def draw_projectiles(self) -> None:
         for projectile in self.state.projectiles:
             projectile.draw(self.screen)
+
             if self.state.debug:
-                pygame.draw.rect(self.screen, (255, 255, 255), projectile.get_rect(), 1)
+                pygame.draw.rect(self.screen, WHITE, projectile.get_rect(), 1)
 
     def draw_hud(self) -> None:
         x = self.map_rect.width + 12
         y = 12
+
         panel = pygame.Rect(self.map_rect.width, 0, HUD_WIDTH, self.screen.get_height())
         pygame.draw.rect(self.screen, (22, 22, 26), panel)
-        pygame.draw.line(self.screen, (90, 90, 90), (self.map_rect.width, 0), (self.map_rect.width, self.screen.get_height()), 2)
+        pygame.draw.line(
+            self.screen,
+            (90, 90, 90),
+            (self.map_rect.width, 0),
+            (self.map_rect.width, self.screen.get_height()),
+            2,
+        )
+
+        invincible_on = getattr(self.player, "invincible", False)
+        invincible_cheat_on = getattr(self.player, "invincible_cheat", False)
+        invincible_timer = getattr(self.weapon_system, "invincible_timer", 0)
+        weapon_count = min(9, len(getattr(self.weapon_system, "weapons", [])))
 
         lines = [
             "INTEGRATED DEBUG",
@@ -370,6 +475,9 @@ class IntegratedDebugGame:
             f"Damage: {self.player.damage}  Speed: {self.player.speed}",
             f"Stat points: {self.player.stat_points}",
             f"Weapon: {self.weapon_system.current.name}",
+            f"Invincible: {'ON' if invincible_on else 'OFF'}",
+            f"B immortal: {'ON' if invincible_cheat_on else 'OFF'}",
+            f"Immortal timer: {invincible_timer}",
             f"Monsters: {len(self.state.monsters)}",
             f"Monster projectiles: {len(self.state.projectiles)}",
             f"Weapon projectiles: {self.weapon_system.projectile_count()}",
@@ -378,19 +486,33 @@ class IntegratedDebugGame:
             "Controls:",
             "WASD move | mouse aim",
             "LMB/Space attack",
-            "1-7 equip weapon | I list",
-            "F1 hitboxes | P pause | R reset",
+            f"1-{weapon_count} equip weapon | I list",
+            "B immortal | F1 hitboxes",
+            "P pause | R reset",
             "M spawn wave | H item | L exp",
             "Z/X/C/V upgrade stats",
         ]
 
         for line in lines:
-            color = (255, 255, 255) if line else (255, 255, 255)
+            color = WHITE
+
+            if line.startswith("Invincible: ON") or line.startswith("B immortal: ON"):
+                color = INVINCIBLE_COLOR
+            elif line.startswith("HP:"):
+                color = (255, 120, 120)
+            elif line.startswith("Armor:"):
+                color = (120, 180, 255)
+            elif line.startswith("Energy:"):
+                color = (255, 220, 80)
+            elif line.startswith("Weapon:"):
+                color = (255, 230, 120)
+
             rendered = self.small_font.render(line, True, color)
             self.screen.blit(rendered, (x, y))
             y += 20
 
         y += 8
+
         for msg in self.messages[-6:]:
             rendered = self.small_font.render(msg.text, True, (255, 230, 120))
             self.screen.blit(rendered, (x, y))
@@ -402,6 +524,7 @@ class IntegratedDebugGame:
             self.update()
             self.draw()
             self.clock.tick(FPS)
+
         pygame.quit()
 
 
