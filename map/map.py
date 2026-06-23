@@ -77,7 +77,7 @@ class MapConfig:
     min_room_w: int = 5
     max_room_w: int = 9
     min_room_h: int = 4
-    max_room_h: int = 7
+    max_room_h: int = 6
     fallback_room: tuple[int, int, int, int] = (2, 2, 6, 5)
 
 
@@ -105,7 +105,7 @@ class MapGenerator:
                 max_x = min((sx + 1) * sector_w - w - 1, cfg.width - w - 2)
                 max_y = min((sy + 1) * sector_h - h - 1, cfg.height - h - 2)
 
-                if max_x <= min_x or max_y <= min_y:
+                if max_x < min_x or max_y < min_y:
                     continue
 
                 x = self.rng.randint(min_x, max_x)
@@ -140,6 +140,15 @@ class MapGenerator:
             for xx in range(room.x, room.x + room.w):
                 grid[yy][xx] = FLOOR
 
+    def _carve_corridor_tile(self, grid: list[list[int]], x: int, y: int) -> None:
+        """Carve a 3x3 corridor cell so entity-sized rects can pass through."""
+        for yy in range(y - 1, y + 2):
+            if yy < 0 or yy >= self.config.height:
+                continue
+            for xx in range(x - 1, x + 2):
+                if 0 <= xx < self.config.width:
+                    grid[yy][xx] = FLOOR
+
     def _connect_rooms(self, grid: list[list[int]], rooms: list[pygame.Rect]) -> None:
         for i in range(1, len(rooms)):
             x1, y1 = rooms[i - 1].center
@@ -147,14 +156,14 @@ class MapGenerator:
 
             if self.rng.choice([True, False]):
                 for x in range(min(x1, x2), max(x1, x2) + 1):
-                    grid[y1][x] = FLOOR
+                    self._carve_corridor_tile(grid, x, y1)
                 for y in range(min(y1, y2), max(y1, y2) + 1):
-                    grid[y][x2] = FLOOR
+                    self._carve_corridor_tile(grid, x2, y)
             else:
                 for y in range(min(y1, y2), max(y1, y2) + 1):
-                    grid[y][x1] = FLOOR
+                    self._carve_corridor_tile(grid, x1, y)
                 for x in range(min(x1, x2), max(x1, x2) + 1):
-                    grid[y2][x] = FLOOR
+                    self._carve_corridor_tile(grid, x, y2)
 
 
 class TileMap:
@@ -210,6 +219,49 @@ class TileMap:
 
     def is_exit_at(self, tx: int, ty: int) -> bool:
         return 0 <= tx < self.width and 0 <= ty < self.height and self.grid[ty][tx] == EXIT
+
+    def is_walkable_tile(self, tx: int, ty: int, *, include_exit: bool = True) -> bool:
+        """Return True when a tile can be occupied by gameplay entities."""
+        tile = self.tile_at(tx, ty)
+        return tile == FLOOR or (include_exit and tile == EXIT)
+
+    def iter_walkable_tiles(self, clearance: int = 0, *, include_exit: bool = True):
+        """Yield walkable tile coordinates with optional wall clearance.
+
+        ``clearance=1`` means the tile and its 8 neighbors must all be
+        walkable.  This is useful for spawning pixel-sized monsters because
+        their centered rect can straddle nearby tiles.
+        """
+        clearance = max(0, int(clearance))
+        for ty in range(self.height):
+            for tx in range(self.width):
+                if not self.is_walkable_tile(tx, ty, include_exit=include_exit):
+                    continue
+
+                clear = True
+                for cy in range(ty - clearance, ty + clearance + 1):
+                    for cx in range(tx - clearance, tx + clearance + 1):
+                        if not self.is_walkable_tile(cx, cy, include_exit=include_exit):
+                            clear = False
+                            break
+                    if not clear:
+                        break
+
+                if clear:
+                    yield tx, ty
+
+    def is_pixel_rect_walkable(self, rect: pygame.Rect, *, include_exit: bool = True) -> bool:
+        """Return True when every tile touched by ``rect`` is walkable."""
+        left = math.floor(rect.left / self.tile_size)
+        right = math.floor((rect.right - 1) / self.tile_size)
+        top = math.floor(rect.top / self.tile_size)
+        bottom = math.floor((rect.bottom - 1) / self.tile_size)
+
+        for ty in range(top, bottom + 1):
+            for tx in range(left, right + 1):
+                if not self.is_walkable_tile(tx, ty, include_exit=include_exit):
+                    return False
+        return True
 
     def collides(self, px: float, py: float, radius: float = PLAYER_RADIUS) -> bool:
         left = math.floor(px - radius)
