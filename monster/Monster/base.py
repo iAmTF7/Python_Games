@@ -64,10 +64,17 @@ class Monster(Entity, ABC):
     def can_attack(self) -> bool:
         return self._current_cooldown <= 0
 
-    def update(self, target, projectiles: list):
-        """Update movement and attack state for one frame."""
+    def update(self, target, projectiles: list, tile_map=None):
+        """Update movement and attack state for one frame.
+
+        ``tile_map`` is optional to keep the older monster-only demos working.
+        When supplied, movement that would place the monster inside a wall is
+        rolled back so the integrated debug runner can use map collision.
+        """
         if not self.is_alive():
             return
+
+        old_x, old_y = self._x, self._y
 
         if self._current_cooldown > 0:
             self._current_cooldown -= 1
@@ -82,6 +89,28 @@ class Monster(Entity, ABC):
                 self._idle_wander()
         else:
             self.move_towards(target)
+
+        if tile_map is not None:
+            self._keep_inside_walkable_map(tile_map, old_x, old_y)
+
+    def _keep_inside_walkable_map(self, tile_map, old_x: float, old_y: float) -> None:
+        if tile_map.is_pixel_rect_walkable(self.get_rect(), include_exit=False):
+            return
+
+        new_x, new_y = self._x, self._y
+
+        # Try axis-separated movement before fully rolling back. This gives the
+        # monsters a simple wall-slide behavior instead of making them freeze.
+        self._x, self._y = new_x, old_y
+        if not tile_map.is_pixel_rect_walkable(self.get_rect(), include_exit=False):
+            self._x = old_x
+
+        self._x, self._y = self._x, new_y
+        if not tile_map.is_pixel_rect_walkable(self.get_rect(), include_exit=False):
+            self._y = old_y
+
+        if not tile_map.is_pixel_rect_walkable(self.get_rect(), include_exit=False):
+            self._x, self._y = old_x, old_y
 
     @abstractmethod
     def attack(self, target, projectiles: list):
@@ -122,16 +151,28 @@ class Monster(Entity, ABC):
 
         self.clamp_to_screen()
 
-    def separate_from_others(self, monsters: list):
+    def separate_from_others(self, monsters: list, tile_map=None):
         """Resolve AABB overlap against other live monsters."""
         if not self.is_alive():
             return
+
+        original_self = (self._x, self._y)
         for other in monsters:
             if other is self or not other.is_alive():
                 continue
             if self.collides_with(other):
+                old_self = (self._x, self._y)
+                old_other = (other._x, other._y)
                 Entity.resolve_aabb_collision(self, other, 0.5, 0.5)
+                if tile_map is not None:
+                    if not tile_map.is_pixel_rect_walkable(self.get_rect(), include_exit=False):
+                        self._x, self._y = old_self
+                    if not tile_map.is_pixel_rect_walkable(other.get_rect(), include_exit=False):
+                        other._x, other._y = old_other
+
         self.clamp_to_screen()
+        if tile_map is not None and not tile_map.is_pixel_rect_walkable(self.get_rect(), include_exit=False):
+            self._x, self._y = original_self
 
     def draw(self, surface):
         if not self.is_alive():
