@@ -49,7 +49,7 @@ class RangedMonster(Monster):
             screen_height=screen_height
         )
 
-    def move_towards(self, target):
+    def move_towards(self, target, tile_map=None):
         """
         Đa hình (Polymorphism): Di chuyển thông minh - giữ khoảng cách.
         - Xa quá → tiến lại gần
@@ -63,15 +63,14 @@ class RangedMonster(Monster):
 
         if dist > self._attack_range:
             # Xa quá → tiến lại gần
-            super().move_towards(target)
+            super().move_towards(target, tile_map)
         elif dist < self._attack_range - MonsterConfig.RANGED_SAFE_DISTANCE:
             # Gần quá → lùi ra xa
             if dist == 0:
                 return
             dx = (self._x - target.x) / dist
             dy = (self._y - target.y) / dist
-            self._x += dx * self._speed
-            self._y += dy * self._speed
+            self._move_by_with_map_collision(dx * self._speed, dy * self._speed, tile_map)
 
     def attack(self, target, projectiles: list):
         """
