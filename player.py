@@ -18,7 +18,7 @@ and level systems.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Iterable, Optional
 
 try:
     import pygame
@@ -162,11 +162,10 @@ class Player:
         # Runtime body / movement state.
         rect_cls = pygame.Rect if pygame else _FallbackRect
         vector_cls = pygame.Vector2 if pygame else _FallbackVector2
-
         self.rect = rect_cls(cfg.x, cfg.y, cfg.width, cfg.height)
         self.direction = vector_cls(0, 1)
 
-        # Tile-space position used by the map module. Pixel-space modules use rect.
+        # Tile-space position used by the map module.  Pixel-space modules use rect.
         self.map_x: float = self.rect.centerx / 32
         self.map_y: float = self.rect.centery / 32
 
@@ -204,12 +203,7 @@ class Player:
 
         # General runtime flags.
         self.alive = True
-
-        # Invincible state.
-        # invincible: trạng thái thật để chặn damage.
-        # invincible_cheat: trạng thái bật/tắt bằng nút B trong main.py.
         self.invincible = False
-        self.invincible_cheat = False
 
     # ------------------------------------------------------------------
     # Position helpers
@@ -289,7 +283,6 @@ class Player:
     def set_direction(self, dx: float, dy: float) -> None:
         vector_cls = pygame.Vector2 if pygame else _FallbackVector2
         direction = vector_cls(dx, dy)
-
         if direction.length() > 0:
             direction = direction.normalize()
             self.direction = direction
@@ -297,7 +290,6 @@ class Player:
     def move_pixels(self, dx: float, dy: float) -> None:
         if dx or dy:
             self.set_direction(dx, dy)
-
         self.rect.x += int(dx)
         self.rect.y += int(dy)
 
@@ -305,7 +297,6 @@ class Player:
         """Move in tile-space using a TileMap-compatible collision object."""
         if dx or dy:
             self.set_direction(dx, dy)
-
         self.map_x, self.map_y = tile_map.move_player(self.map_x, self.map_y, dx, dy)
         self.sync_rect_from_tile_position(tile_size)
 
@@ -318,16 +309,13 @@ class Player:
     def take_damage(self, amount: int | float, *, use_armor: bool = True) -> int | float:
         """Damage the player and return the amount that reached HP.
 
-        If invincible is active, all incoming damage is blocked.
-
         Armor-first damage is provided as a standard player behavior. Existing
         modules that directly mutate ``hp`` still remain compatible.
         """
-        if getattr(self, "invincible", False) or amount <= 0:
+        if self.invincible or amount <= 0:
             return 0
 
         remaining = amount
-
         if use_armor and self.armor > 0:
             absorbed = min(self.armor, remaining)
             self.armor -= absorbed
@@ -343,7 +331,6 @@ class Player:
 
     def heal(self, amount: int | float) -> None:
         self.hp = min(self.max_hp, self.hp + amount)
-
         if self.hp > 0:
             self.alive = True
 
@@ -356,7 +343,6 @@ class Player:
     def spend_energy(self, amount: int | float) -> bool:
         if self.energy < amount:
             return False
-
         self.energy -= amount
         return True
 
@@ -366,14 +352,9 @@ class Player:
         self.energy = self.max_energy
         self.alive = True
 
-        # Reset bất tử khi hồi full/reset world.
-        self.invincible = False
-        self.invincible_cheat = False
-
     def add_special_item(self, item_type: str) -> bool:
         if item_type in self.special_items:
             return False
-
         self.special_items.append(item_type)
         return True
 
@@ -384,10 +365,8 @@ class Player:
         """Apply one regen tick. Call this only at your chosen regen cadence."""
         if self.hp_regen:
             self.heal(self.hp_regen)
-
         if self.armor_regen:
             self.restore_armor(self.armor_regen)
-
         if self.energy_regen:
             self.restore_energy(self.energy_regen)
 
@@ -402,13 +381,6 @@ class Player:
     def draw(self, surface: Any, color: tuple[int, int, int] = (0, 200, 255)) -> None:
         if pygame and surface is not None:
             pygame.draw.rect(surface, color, self.rect)
-
-            # Visual shield while invincible.
-            # Nếu main.py cũng vẽ vòng bất tử thì đoạn này vẫn không lỗi,
-            # chỉ là hiệu ứng sẽ sáng hơn một chút.
-            if getattr(self, "invincible", False):
-                pygame.draw.rect(surface, (80, 255, 255), self.rect.inflate(10, 10), 3)
-                pygame.draw.rect(surface, (255, 255, 255), self.rect.inflate(16, 16), 1)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -426,8 +398,6 @@ class Player:
             "speed": self.speed,
             "special_items": list(self.special_items),
             "alive": self.alive,
-            "invincible": self.invincible,
-            "invincible_cheat": self.invincible_cheat,
         }
 
 
