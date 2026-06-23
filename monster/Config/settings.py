@@ -76,6 +76,7 @@ class MonsterConfig:
     MELEE_HP = 50
     MELEE_DAMAGE = 10
     MELEE_ATTACK_RANGE = 70         # Tầm kiếm (giống độ dài lưỡi kiếm player)
+    MELEE_DETECT_RANGE = 150        # Tầm phát hiện player - ngoài tầm này quái đứng yên
     MELEE_SPEED = 2.5
     MELEE_COOLDOWN = Settings.FPS    # 1 giây / lần chém (60 frame @ 60 FPS) - hồi chiêu
     MELEE_SIZE = 30
@@ -94,6 +95,7 @@ class MonsterConfig:
     RANGED_HP = 30
     RANGED_DAMAGE = 15
     RANGED_ATTACK_RANGE = 300
+    RANGED_DETECT_RANGE = 250   # Tầm phát hiện player - ngoài tầm này quái đứng yên
     RANGED_SPEED = 1.0
     RANGED_COOLDOWN = 90
     RANGED_SIZE = 30

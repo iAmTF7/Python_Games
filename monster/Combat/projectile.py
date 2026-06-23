@@ -90,6 +90,16 @@ class Projectile:
         """Shared-system compatibility alias."""
         return not self.is_out_of_bounds()
 
+    def is_blocked_by_wall(self, tile_map) -> bool:
+        """Return True when the projectile's current position is inside a wall.
+
+        ``tile_map`` may be ``None`` (e.g. standalone tests without a map),
+        in which case the projectile is never blocked by walls.
+        """
+        if tile_map is None:
+            return False
+        return not tile_map.is_pixel_rect_walkable(self.get_rect(), include_exit=True)
+
     def check_hit(self, target) -> bool:
         dist = math.sqrt((self._x - target.x) ** 2 + (self._y - target.y) ** 2)
         return dist < target.size / 2 + self._radius

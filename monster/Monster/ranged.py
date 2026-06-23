@@ -49,7 +49,8 @@ class RangedMonster(Monster):
             color=MonsterConfig.RANGED_COLOR,
             size=MonsterConfig.RANGED_SIZE,
             screen_width=screen_width,
-            screen_height=screen_height
+            screen_height=screen_height,
+            detect_range=MonsterConfig.RANGED_DETECT_RANGE,
         )
         # Hướng cầm súng (đơn vị vector), cập nhật mỗi khi di chuyển/bắn.
         self._facing_x = 0.0

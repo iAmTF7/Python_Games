@@ -69,7 +69,8 @@ class MeleeMonster(Monster):
             color=MonsterConfig.MELEE_COLOR,
             size=MonsterConfig.MELEE_SIZE,
             screen_width=screen_width,
-            screen_height=screen_height
+            screen_height=screen_height,
+            detect_range=MonsterConfig.MELEE_DETECT_RANGE,
         )
         # Hướng quái đang nhìn/cầm kiếm (đơn vị vector). Mặc định nhìn xuống.
         self._facing_x = 0.0
@@ -118,12 +119,16 @@ class MeleeMonster(Monster):
         dist = self.distance_to(target)
 
         if self._state == self.STATE_CHASING:
-            self._update_facing(target)
-            if dist <= self._attack_range:
+            if self._detect_range is not None and dist > self._detect_range:
+                # Player ngoài tầm phát hiện -> đứng yên hoàn toàn, chưa
+                # phát hiện player, không đuổi và không quay hướng.
+                pass
+            elif dist <= self._attack_range:
                 # Vào tầm đánh -> dừng lại, "chốt" hướng nhìn về player VÀ
                 # random góc cung chém (90-180 độ, giống Soul Knight) tại
                 # thời điểm này. Không xoay theo trong lúc đang chém - player
                 # có thể né bằng cách lách ra sau lưng trong lúc wind-up.
+                self._update_facing(target)
                 self._state = self.STATE_WINDUP
                 self._windup_timer = MonsterConfig.MELEE_WINDUP_FRAMES
                 self._slash_angle = random.uniform(
@@ -131,7 +136,7 @@ class MeleeMonster(Monster):
                     MonsterConfig.MELEE_SLASH_ANGLE_MAX
                 )
             else:
-                # Chưa vào tầm -> tiếp tục đuổi thẳng về phía player
+                # Đã phát hiện player, chưa vào tầm -> đuổi thẳng tới
                 self.move_towards(target)
 
         elif self._state == self.STATE_WINDUP:
