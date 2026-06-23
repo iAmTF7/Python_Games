@@ -286,6 +286,8 @@ class IntegratedDebugGame:
             projectile.update()
             if projectile.is_out_of_bounds():
                 continue
+            if projectile.is_blocked_by_wall(self.tile_map):
+                continue
             if projectile.check_hit(self.player):
                 self.player.take_damage(projectile.damage)
                 self.log(f"Player hit for {projectile.damage}", timer=70)
