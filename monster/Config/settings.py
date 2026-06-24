@@ -50,8 +50,9 @@ class Settings:
     SPAWN_MAX_ATTEMPTS = 100             # Số lần thử tìm vị trí spawn
 
     # Base enemy
-    BASE_ENEMY_COUNT = 3            # Số quái cơ bản ở level 1
-    ENEMY_INCREASE_PER_LEVEL = 1    # Tăng thêm mỗi level (giảm từ 2 -> 1, đỡ dồn quá nhiều quái)
+    BASE_ENEMY_COUNT = 10            # Số quái cơ bản ở room đầu tiên
+    ENEMY_INCREASE_PER_LEVEL = 2    # Mỗi room tăng thêm n quái
+    MAX_ENEMY_COUNT = 30            # Giới hạn tối đa quái được spawn mỗi room
 
     # Va chạm giữa quái - "ô cứng" để quái không chồng/dính lên nhau
     MONSTER_COLLISION_PUSH = 0.5          # Mỗi quái nhận nửa độ lệch overlap (ổn định, không giật)
