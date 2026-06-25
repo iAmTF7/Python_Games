@@ -44,6 +44,7 @@ SPEED = 0.1
 FLOOR_COLOR = (70, 70, 70)
 WALL_COLOR = (25, 25, 25)
 EXIT_COLOR = (60, 180, 80)
+LOCKED_EXIT_COLOR = (90, 55, 45)
 PLAYER_MARKER_COLOR = (220, 60, 60)
 
 
@@ -182,6 +183,7 @@ class TileMap:
         self.rooms: list[pygame.Rect] = []
         self.start_pos: tuple[int, int] = (0, 0)
         self.exit_pos: tuple[int, int] = (0, 0)
+        self.exit_open: bool = True
         self.load_level(level)
 
     @property
@@ -207,7 +209,20 @@ class TileMap:
         self.rooms = data.rooms
         self.start_pos = data.start_pos
         self.exit_pos = data.exit_pos
+        self.exit_open = True
         return data
+
+    def close_exit(self) -> None:
+        """Close the room exit until the current enemy set is cleared."""
+        ex, ey = self.exit_pos
+        self.grid[ey][ex] = WALL
+        self.exit_open = False
+
+    def open_exit(self) -> None:
+        """Open the room exit so the player can advance to the next room."""
+        ex, ey = self.exit_pos
+        self.grid[ey][ex] = EXIT
+        self.exit_open = True
 
     def tile_at(self, tx: int, ty: int) -> int | None:
         if 0 <= tx < self.width and 0 <= ty < self.height:
@@ -317,7 +332,12 @@ class TileMap:
         return px, py
 
     def reached_exit(self, px: float, py: float) -> bool:
-        return int(px) == self.exit_pos[0] and int(py) == self.exit_pos[1]
+        return (
+            self.exit_open
+            and int(px) == self.exit_pos[0]
+            and int(py) == self.exit_pos[1]
+            and self.is_exit_at(self.exit_pos[0], self.exit_pos[1])
+        )
 
     def maybe_advance_level(self, px: float, py: float) -> bool:
         if not self.reached_exit(px, py):
@@ -362,6 +382,8 @@ class TileMap:
                     color = FLOOR_COLOR
                 elif tile == EXIT:
                     color = EXIT_COLOR
+                elif (x, y) == self.exit_pos and not self.exit_open:
+                    color = LOCKED_EXIT_COLOR
                 else:
                     color = WALL_COLOR
                 pygame.draw.rect(

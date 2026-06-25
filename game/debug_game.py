@@ -100,6 +100,7 @@ class IntegratedDebugGame:
 
     def spawn_wave(self) -> None:
         self.state.projectiles.clear()
+        self.tile_map.close_exit()
         wave_level = max(1, self.tile_map.level + 1)
         self.state.monsters = self.monster_spawner.spawn_wave(
             wave_level,
@@ -107,7 +108,13 @@ class IntegratedDebugGame:
             self.player.y,
             self.tile_map,
         )
-        self.log(f"Spawned {len(self.state.monsters)} monsters for map level {wave_level}")
+        if not self.state.monsters:
+            self.tile_map.open_exit()
+            self.log("No monsters spawned; exit opened")
+        else:
+            self.log(
+                f"Spawned {len(self.state.monsters)} monsters for room {wave_level}; exit locked"
+            )
 
     def reset_debug_world(self) -> None:
         self.tile_map.load_level(0)
@@ -264,12 +271,10 @@ class IntegratedDebugGame:
             self.map_rect,
         )
         self.item_pickup_system.update(self.state)
+        self.update_room_completion()
         self.update_level_exit()
         self.update_player_timers()
         self.messages = [m for m in self.messages if m.tick()]
-
-        if not self.state.monsters:
-            self.spawn_wave()
 
     def update_monsters(self) -> None:
         for monster in list(self.state.monsters):
@@ -279,6 +284,14 @@ class IntegratedDebugGame:
             monster.separate_from_others(self.state.monsters, self.tile_map)
 
         self.state.monsters = [monster for monster in self.state.monsters if monster.is_alive()]
+
+    def update_room_completion(self) -> None:
+        self.state.monsters = [monster for monster in self.state.monsters if monster.is_alive()]
+        if self.state.monsters or self.tile_map.exit_open:
+            return
+        self.state.projectiles.clear()
+        self.tile_map.open_exit()
+        self.log("Room clear! Exit opened")
 
     def update_monster_projectiles(self) -> None:
         live_projectiles = []
@@ -300,6 +313,7 @@ class IntegratedDebugGame:
             self.tile_map.load_level(self.tile_map.level + 1)
             self.tile_map.place_player_at_start(self.player)
             self.state.items.clear()
+            self.state.level = self.tile_map.level + 1
             self.spawn_wave()
             self.log(f"Entered map level {self.tile_map.level + 1}")
 
@@ -382,7 +396,7 @@ class IntegratedDebugGame:
             "LMB/Space attack",
             "1-7 equip weapon | I list",
             "F1 hitboxes | P pause | R reset",
-            "M spawn wave | H item | L exp",
+            "M restart room fight | H item | L exp",
             "Z/X/C/V upgrade stats",
         ]
 
