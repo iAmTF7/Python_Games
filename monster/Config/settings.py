@@ -39,9 +39,10 @@ class Settings:
     Đóng gói (Encapsulation): quản lý tập trung cấu hình.
     """
     # Kích thước màn hình mặc định
-    SCREEN_WIDTH = 800
-    SCREEN_HEIGHT = 600
+    SCREEN_WIDTH = 1280
+    SCREEN_HEIGHT = 720
     FPS = 60
+
 
     # Spawn
     SPAWN_MARGIN = 60               # Khoảng cách tối thiểu từ viền
