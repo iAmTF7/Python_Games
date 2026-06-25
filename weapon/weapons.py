@@ -346,6 +346,70 @@ def projectile_blocked_by_wall(tile_map, projectile_rect, previous_center=None):
     return False
 
 
+def _tile_size_for(tile_map, default=32):
+    return int(getattr(tile_map, "tile_size", default) or default)
+
+
+def sync_player_tile_position_from_rect(player, tile_map=None):
+    """Keep tile-space player coordinates aligned with the pixel rect."""
+    if player is None or not hasattr(player, "rect"):
+        return
+
+    tile_size = _tile_size_for(tile_map)
+    sync_tile_position = getattr(player, "sync_tile_position_from_rect", None)
+    if callable(sync_tile_position):
+        try:
+            sync_tile_position(tile_size)
+        except TypeError:
+            sync_tile_position()
+        return
+
+    if hasattr(player, "map_x"):
+        player.map_x = player.rect.centerx / tile_size
+    if hasattr(player, "map_y"):
+        player.map_y = player.rect.centery / tile_size
+
+
+def find_walkable_dash_end(player_rect, start, desired_end, screen_rect, tile_map=None):
+    """Return the farthest dash endpoint whose player rect stays walkable.
+
+    Boundary clamping alone is not enough for dungeon maps because a dash can
+    cross or finish inside interior wall tiles.  This samples the swept player
+    rect along the dash and stops at the last walkable center before collision.
+    """
+    target_rect = player_rect.copy()
+    target_rect.center = (int(desired_end.x), int(desired_end.y))
+    target_rect.clamp_ip(screen_rect)
+    desired_end = pygame.Vector2(target_rect.centerx, target_rect.centery)
+
+    is_walkable = getattr(tile_map, "is_pixel_rect_walkable", None) if tile_map is not None else None
+    if not callable(is_walkable):
+        return desired_end
+
+    dash = desired_end - start
+    distance = dash.length()
+    if distance <= 0:
+        return pygame.Vector2(start.x, start.y)
+
+    step_size = max(2, min(6, player_rect.width // 4, player_rect.height // 4))
+    steps = max(1, int(math.ceil(distance / step_size)))
+    last_safe = pygame.Vector2(start.x, start.y)
+
+    test_rect = player_rect.copy()
+    for step in range(1, steps + 1):
+        candidate = start.lerp(desired_end, step / steps)
+        test_rect.center = (int(candidate.x), int(candidate.y))
+        test_rect.clamp_ip(screen_rect)
+
+        if is_walkable(test_rect, include_exit=True):
+            last_safe = pygame.Vector2(test_rect.centerx, test_rect.centery)
+            continue
+
+        break
+
+    return last_safe
+
+
 # =========================
 # CONTEXT
 # =========================
@@ -358,6 +422,7 @@ class WeaponUseContext:
     screen_rect: pygame.Rect
     width: int
     height: int
+    tile_map: object | None = None
 
     @property
     def player_rect(self):
@@ -1008,14 +1073,18 @@ class DualBladesWeapon(BaseWeapon):
         d = context.direction
         start = pygame.Vector2(player_rect.centerx, player_rect.centery)
         target_pos = start + d * self.data["dash_distance"]
+        end = find_walkable_dash_end(
+            player_rect,
+            start,
+            target_pos,
+            context.screen_rect,
+            context.tile_map,
+        )
 
-        target_x = max(player_rect.width // 2, min(context.width - player_rect.width // 2, target_pos.x))
-        target_y = max(player_rect.height // 2, min(context.height - player_rect.height // 2, target_pos.y))
-        end = pygame.Vector2(target_x, target_y)
-
-        player_rect.centerx = int(end.x)
-        player_rect.centery = int(end.y)
+        player_rect.center = (int(end.x), int(end.y))
         player_rect.clamp_ip(context.screen_rect)
+        end = pygame.Vector2(player_rect.centerx, player_rect.centery)
+        sync_player_tile_position_from_rect(context.player, context.tile_map)
 
         width = self.data["slash_width"]
         for monster in context.monsters:
@@ -1137,7 +1206,7 @@ class WeaponSystem:
             self.flag_swing.set_direction(direction)
             self.flag_attack_direction = pygame.Vector2(direction.x, direction.y)
 
-    def use_weapon(self, player, player_direction, monsters, damage_monster, screen_rect, width, height):
+    def use_weapon(self, player, player_direction, monsters, damage_monster, screen_rect, width, height, tile_map=None):
         context = WeaponUseContext(
             player=player,
             player_direction=player_direction,
@@ -1146,6 +1215,7 @@ class WeaponSystem:
             screen_rect=screen_rect,
             width=width,
             height=height,
+            tile_map=tile_map,
         )
         self.current.use(self, context)
 
@@ -1640,9 +1710,9 @@ def make_boomerang(player, player_direction):
     return BoomerangProjectile.create(player, player_direction, weapon())
 
 
-def use_weapon(player, player_direction, monsters, damage_monster, screen_rect, width, height):
+def use_weapon(player, player_direction, monsters, damage_monster, screen_rect, width, height, tile_map=None):
     _sync_system_from_exports()
-    _default_system.use_weapon(player, player_direction, monsters, damage_monster, screen_rect, width, height)
+    _default_system.use_weapon(player, player_direction, monsters, damage_monster, screen_rect, width, height, tile_map)
     _sync_exports_from_system()
 
 

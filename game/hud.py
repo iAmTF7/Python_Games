@@ -47,7 +47,7 @@ class GameHUD:
     CARD_TITLE_HEIGHT = 40
     CARD_GAP = 14
     STATUS_CARD_HEIGHT = 168
-    RUN_CARD_HEIGHT = 184
+    RUN_CARD_HEIGHT = 250
     CONTROLS_CARD_HEIGHT = 268
     STAT_ROW_HEIGHT = 38
     STAT_ICON_SIZE = 30
@@ -83,6 +83,8 @@ class GameHUD:
         items: Sequence[object],
         score: int,
         messages: Iterable[object],
+        room_reached: int = 1,
+        leaderboard: Sequence[object] = (),
     ) -> None:
         self._draw_panel(surface)
         x = self.map_width + self.PANEL_PADDING
@@ -102,6 +104,8 @@ class GameHUD:
             monster_projectiles,
             items,
             score,
+            room_reached,
+            leaderboard,
         )
         y = self._draw_controls_card(surface, x, y + self.CARD_GAP, content_width)
         self._draw_messages(surface, x, y + self.CARD_GAP, messages)
@@ -177,27 +181,70 @@ class GameHUD:
         monster_projectiles: Sequence[object],
         items: Sequence[object],
         score: int,
+        room_reached: int,
+        leaderboard: Sequence[object],
     ) -> int:
         card = pygame.Rect(x, y, width, self.RUN_CARD_HEIGHT)
         row_y = self._draw_card(surface, card, "RUN INFO")
-        weapon = getattr(getattr(weapon_system, "current", None), "name", "-")
         rows = [
-            ("MAP", str(getattr(tile_map, "level", 0) + 1)),
+            ("ROOM", str(getattr(tile_map, "level", 0) + 1)),
             (
                 "LV",
                 f"{getattr(player, 'level', 1)}  XP {getattr(player, 'exp', 0)}/{getattr(player, 'exp_need', 0)}",
             ),
             ("DMG", f"{getattr(player, 'damage', 0)}  SPD {getattr(player, 'speed', 0)}"),
-            ("PTS", str(getattr(player, "stat_points", 0))),
-            ("WPN", weapon),
-            ("ENEMY", f"{len(monsters)}  SHOTS {len(monster_projectiles)}"),
-            ("BAG", f"{len(items)}  SCORE {score}"),
+            ("BAG", f"{len(items)}  KILLS {score}"),
         ]
         for label, value in rows:
             self._text(surface, label, x + self.CARD_PADDING_X, row_y, self.MUTED, self.small_font)
             self._text(surface, value, x + 80, row_y, self.TEXT, self.small_font)
             row_y += 20
+
+        self._draw_leaderboard(
+            surface,
+            x + self.CARD_PADDING_X,
+            row_y + 8,
+            width - self.CARD_PADDING_X * 2,
+            room_reached,
+            leaderboard,
+        )
         return card.bottom
+
+    def _draw_leaderboard(
+        self,
+        surface: pygame.Surface,
+        x: int,
+        y: int,
+        width: int,
+        room_reached: int,
+        leaderboard: Sequence[object],
+    ) -> None:
+        self._text(surface, "LEADERBOARD", x, y, self.TEXT, self.small_font)
+        y += 20
+        self._text(surface, "RUN", x, y, self.MUTED, self.small_font)
+        self._text(surface, f"Room {max(1, int(room_reached))}", x + 80, y, self.WARNING, self.small_font)
+        y += 20
+
+        if not leaderboard:
+            self._text(surface, "No saved runs yet", x, y, self.MUTED, self.small_font)
+            return
+
+        for rank, entry in enumerate(leaderboard[:5], start=1):
+            room = self._entry_room(entry)
+            self._text(surface, f"#{rank}", x, y, self.MUTED, self.small_font)
+            self._text(surface, f"Room {room}", x + 80, y, self.TEXT, self.small_font)
+            y += 18
+
+    @staticmethod
+    def _entry_room(entry: object) -> int:
+        if isinstance(entry, dict):
+            value = entry.get("room_reached", 1)
+        else:
+            value = getattr(entry, "room_reached", 1)
+        try:
+            return max(1, int(value))
+        except (TypeError, ValueError):
+            return 1
 
     def _draw_controls_card(
         self,

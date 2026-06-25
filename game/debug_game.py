@@ -17,6 +17,7 @@ import pygame
 
 from game.state import GameState
 from game.hud import GameHUD
+from game.high_scores import HighScoreTable
 from item import DropTable, Item, ItemPickupSystem
 from level import LevelSystem, StatUpgradeSystem
 from map import MapSystem, TileMap
@@ -67,6 +68,8 @@ class IntegratedDebugGame:
         self.clock = pygame.time.Clock()
         self.font = pygame.font.Font(None, 24)
         self.small_font = pygame.font.Font(None, 18)
+        self.game_over_font = pygame.font.Font(None, 74)
+        self.restart_font = pygame.font.Font(None, 30)
         self.hud = GameHUD(map_width, HUD_WIDTH, self.font, self.small_font)
 
         self.player = Player(width=32, height=32)
@@ -87,8 +90,12 @@ class IntegratedDebugGame:
         self.state.projectiles = []  # monster projectiles
         self.state.items = []
         self.state.score = 0
+        self.state.room_reached = self.tile_map.level + 1
+        self.high_scores = HighScoreTable()
+        self.run_recorded = False
         self.messages: list[DebugMessage] = []
         self.regen_timer = 0
+        self.game_over = False
 
         self.spawn_wave()
         self.log("Debug HUD ready")
@@ -118,7 +125,17 @@ class IntegratedDebugGame:
                 f"Spawned {len(self.state.monsters)} monsters for room {wave_level}; exit locked"
             )
 
+    def submit_current_run(self) -> None:
+        if self.run_recorded:
+            return
+        room_reached = max(1, int(getattr(self.state, "room_reached", self.tile_map.level + 1)))
+        self.high_scores.submit(room_reached)
+        self.run_recorded = True
+
     def reset_debug_world(self) -> None:
+        self.submit_current_run()
+        self.game_over = False
+        self.state.paused = False
         self.tile_map.load_level(0)
         self.tile_map.place_player_at_start(self.player)
         self.player.restore_full()
@@ -128,6 +145,8 @@ class IntegratedDebugGame:
         self.player.stat_points = 0
         self.state.items.clear()
         self.state.score = 0
+        self.state.room_reached = self.tile_map.level + 1
+        self.run_recorded = False
         self.spawn_wave()
         self.log("World reset")
 
@@ -137,6 +156,7 @@ class IntegratedDebugGame:
     def handle_events(self) -> None:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
+                self.submit_current_run()
                 self.state.running = False
                 continue
 
@@ -150,7 +170,16 @@ class IntegratedDebugGame:
     def handle_keydown(self, event: pygame.event.Event) -> None:
         key = event.key
 
+        if self.game_over:
+            if key == pygame.K_ESCAPE:
+                self.submit_current_run()
+                self.state.running = False
+            elif key == pygame.K_r:
+                self.reset_debug_world()
+            return
+
         if key == pygame.K_ESCAPE:
+            self.submit_current_run()
             self.state.running = False
         elif key == pygame.K_p:
             self.state.paused = not self.state.paused
@@ -216,6 +245,7 @@ class IntegratedDebugGame:
             self.map_rect,
             self.map_rect.width,
             self.map_rect.height,
+            self.tile_map,
         )
 
     def damage_monster(self, monster: Any, amount: int | float) -> None:
@@ -248,6 +278,10 @@ class IntegratedDebugGame:
         self.state.items.append(item)
 
     def update(self) -> None:
+        if self.game_over:
+            self.messages = [m for m in self.messages if m.tick()]
+            return
+
         if self.state.paused:
             self.messages = [m for m in self.messages if m.tick()]
             return
@@ -264,7 +298,11 @@ class IntegratedDebugGame:
             self.use_current_weapon()
 
         self.update_monsters()
+        if self.game_over:
+            return
         self.update_monster_projectiles()
+        if self.game_over:
+            return
         self.weapon_system.update(
             self.player,
             self.player.direction,
@@ -277,13 +315,24 @@ class IntegratedDebugGame:
         self.update_room_completion()
         self.update_level_exit()
         self.update_player_timers()
+        self.check_player_death()
         self.messages = [m for m in self.messages if m.tick()]
+
+    def check_player_death(self) -> None:
+        if not self.game_over and not self.player.is_alive():
+            self.game_over = True
+            self.state.projectiles.clear()
+            self.submit_current_run()
+            self.log("Game Over", timer=FPS * 5)
 
     def update_monsters(self) -> None:
         for monster in list(self.state.monsters):
             if not monster.is_alive():
                 continue
             monster.update(self.player, self.state.projectiles, self.tile_map)
+            self.check_player_death()
+            if self.game_over:
+                break
             monster.separate_from_others(self.state.monsters, self.tile_map)
 
         self.state.monsters = [monster for monster in self.state.monsters if monster.is_alive()]
@@ -307,6 +356,10 @@ class IntegratedDebugGame:
             if projectile.check_hit(self.player):
                 self.player.take_damage(projectile.damage)
                 self.log(f"Player hit for {projectile.damage}", timer=70)
+                self.check_player_death()
+                if self.game_over:
+                    self.state.projectiles.clear()
+                    return
                 continue
             live_projectiles.append(projectile)
         self.state.projectiles = live_projectiles
@@ -317,8 +370,9 @@ class IntegratedDebugGame:
             self.tile_map.place_player_at_start(self.player)
             self.state.items.clear()
             self.state.level = self.tile_map.level + 1
+            self.state.room_reached = max(self.state.room_reached, self.state.level)
             self.spawn_wave()
-            self.log(f"Entered map level {self.tile_map.level + 1}")
+            self.log(f"Entered room {self.tile_map.level + 1}")
 
     def update_player_timers(self) -> None:
         self.player.update()
@@ -358,8 +412,25 @@ class IntegratedDebugGame:
             items=self.state.items,
             score=self.state.score,
             messages=self.messages,
+            room_reached=self.state.room_reached,
+            leaderboard=self.high_scores.display_entries(),
         )
+        if self.game_over:
+            self.draw_game_over_overlay()
         pygame.display.flip()
+
+    def draw_game_over_overlay(self) -> None:
+        overlay = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 185))
+        self.screen.blit(overlay, (0, 0))
+
+        title = self.game_over_font.render("Game Over", True, (255, 245, 245))
+        prompt = self.restart_font.render("Press R to restart or Esc to quit", True, (255, 230, 120))
+
+        center_x = self.screen.get_width() // 2
+        center_y = self.screen.get_height() // 2
+        self.screen.blit(title, title.get_rect(center=(center_x, center_y - 36)))
+        self.screen.blit(prompt, prompt.get_rect(center=(center_x, center_y + 28)))
 
     def draw_items(self) -> None:
         for item in self.state.items:
