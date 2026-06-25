@@ -16,6 +16,7 @@ from typing import Any
 import pygame
 
 from game.state import GameState
+from game.hud import GameHUD
 from item import DropTable, Item, ItemPickupSystem
 from level import LevelSystem, StatUpgradeSystem
 from map import MapSystem, TileMap
@@ -66,6 +67,7 @@ class IntegratedDebugGame:
         self.clock = pygame.time.Clock()
         self.font = pygame.font.Font(None, 24)
         self.small_font = pygame.font.Font(None, 18)
+        self.hud = GameHUD(map_width, HUD_WIDTH, self.font, self.small_font)
 
         self.player = Player(width=32, height=32)
         self.tile_map.place_player_at_start(self.player)
@@ -89,7 +91,7 @@ class IntegratedDebugGame:
         self.regen_timer = 0
 
         self.spawn_wave()
-        self.log("Debug ready: WASD move, mouse aim, click/space attack, F1 hitboxes")
+        self.log("Debug HUD ready")
 
     # ------------------------------------------------------------------
     # Setup helpers
@@ -269,6 +271,7 @@ class IntegratedDebugGame:
             self.state.monsters,
             self.damage_monster,
             self.map_rect,
+            self.tile_map,
         )
         self.item_pickup_system.update(self.state)
         self.update_room_completion()
@@ -345,7 +348,17 @@ class IntegratedDebugGame:
                 self.screen.get_width(),
                 self.screen.get_height(),
             )
-        self.draw_hud()
+        self.hud.draw(
+            self.screen,
+            player=self.player,
+            tile_map=self.tile_map,
+            weapon_system=self.weapon_system,
+            monsters=self.state.monsters,
+            monster_projectiles=self.state.projectiles,
+            items=self.state.items,
+            score=self.state.score,
+            messages=self.messages,
+        )
         pygame.display.flip()
 
     def draw_items(self) -> None:
@@ -368,49 +381,6 @@ class IntegratedDebugGame:
             projectile.draw(self.screen)
             if self.state.debug:
                 pygame.draw.rect(self.screen, (255, 255, 255), projectile.get_rect(), 1)
-
-    def draw_hud(self) -> None:
-        x = self.map_rect.width + 12
-        y = 12
-        panel = pygame.Rect(self.map_rect.width, 0, HUD_WIDTH, self.screen.get_height())
-        pygame.draw.rect(self.screen, (22, 22, 26), panel)
-        pygame.draw.line(self.screen, (90, 90, 90), (self.map_rect.width, 0), (self.map_rect.width, self.screen.get_height()), 2)
-
-        lines = [
-            "INTEGRATED DEBUG",
-            f"Map level: {self.tile_map.level + 1}",
-            f"Player LV: {self.player.level}  EXP: {self.player.exp}/{self.player.exp_need}",
-            f"HP: {int(self.player.hp)}/{self.player.max_hp}",
-            f"Armor: {int(self.player.armor)}/{self.player.max_armor}",
-            f"Energy: {int(self.player.energy)}/{self.player.max_energy}",
-            f"Damage: {self.player.damage}  Speed: {self.player.speed}",
-            f"Stat points: {self.player.stat_points}",
-            f"Weapon: {self.weapon_system.current.name}",
-            f"Monsters: {len(self.state.monsters)}",
-            f"Monster projectiles: {len(self.state.projectiles)}",
-            f"Weapon projectiles: {self.weapon_system.projectile_count()}",
-            f"Items: {len(self.state.items)}  Score: {self.state.score}",
-            "",
-            "Controls:",
-            "WASD move | mouse aim",
-            "LMB/Space attack",
-            "1-7 equip weapon | I list",
-            "F1 hitboxes | P pause | R reset",
-            "M restart room fight | H item | L exp",
-            "Z/X/C/V upgrade stats",
-        ]
-
-        for line in lines:
-            color = (255, 255, 255) if line else (255, 255, 255)
-            rendered = self.small_font.render(line, True, color)
-            self.screen.blit(rendered, (x, y))
-            y += 20
-
-        y += 8
-        for msg in self.messages[-6:]:
-            rendered = self.small_font.render(msg.text, True, (255, 230, 120))
-            self.screen.blit(rendered, (x, y))
-            y += 18
 
     def run(self) -> None:
         while self.state.running:

@@ -278,6 +278,65 @@ class TileMap:
                     return False
         return True
 
+    def tile_rect(self, tx: int, ty: int) -> pygame.Rect:
+        """Return the pixel-space rectangle occupied by one map tile."""
+        return pygame.Rect(
+            tx * self.tile_size,
+            ty * self.tile_size,
+            self.tile_size,
+            self.tile_size,
+        )
+
+    def iter_wall_rects_between(
+        self,
+        start_pos: tuple[float, float],
+        end_pos: tuple[float, float],
+        *,
+        padding_tiles: int = 1,
+    ):
+        """Yield wall tile rects near the pixel-space line segment.
+
+        Checking only the line's bounding box keeps line-of-sight tests cheap
+        while still catching nearby blockers around diagonal shots.
+        """
+        start_x, start_y = start_pos
+        end_x, end_y = end_pos
+        left = max(0, math.floor(min(start_x, end_x) / self.tile_size) - padding_tiles)
+        right = min(
+            self.width - 1,
+            math.floor(max(start_x, end_x) / self.tile_size) + padding_tiles,
+        )
+        top = max(0, math.floor(min(start_y, end_y) / self.tile_size) - padding_tiles)
+        bottom = min(
+            self.height - 1,
+            math.floor(max(start_y, end_y) / self.tile_size) + padding_tiles,
+        )
+
+        for ty in range(top, bottom + 1):
+            for tx in range(left, right + 1):
+                if self.is_wall_at(tx, ty):
+                    yield self.tile_rect(tx, ty)
+
+    def has_line_of_sight(
+        self,
+        start_pos: tuple[float, float],
+        end_pos: tuple[float, float],
+    ) -> bool:
+        """Return True if no wall tile blocks the line between two pixels.
+
+        This is intended for enemy vision/aim checks: ranged monsters should
+        not detect or shoot the player through closed walls.
+        """
+        start = (int(start_pos[0]), int(start_pos[1]))
+        end = (int(end_pos[0]), int(end_pos[1]))
+        if start == end:
+            return True
+
+        for wall_rect in self.iter_wall_rects_between(start, end):
+            if wall_rect.clipline(start, end):
+                return False
+        return True
+
     def collides(self, px: float, py: float, radius: float = PLAYER_RADIUS) -> bool:
         left = math.floor(px - radius)
         right = math.floor(px + radius)
@@ -471,6 +530,13 @@ def is_wall_at(tx: int, ty: int) -> bool:
     return _default_map.is_wall_at(tx, ty)
 
 
+def has_line_of_sight(
+    start_pos: tuple[float, float],
+    end_pos: tuple[float, float],
+) -> bool:
+    return _default_map.has_line_of_sight(start_pos, end_pos)
+
+
 def collides(px: float, py: float) -> bool:
     return _default_map.collides(px, py)
 
@@ -506,6 +572,7 @@ __all__ = [
     "find_max_safe_move",
     "game_map",
     "generate_map",
+    "has_line_of_sight",
     "is_wall_at",
     "load_level",
     "move_player",

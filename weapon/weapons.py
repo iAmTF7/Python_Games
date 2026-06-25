@@ -309,6 +309,43 @@ def rect_hits_line(rect, start, end, width):
     return distance <= width / 2 + monster_radius
 
 
+def projectile_blocked_by_wall(tile_map, projectile_rect, previous_center=None):
+    """Return True when a player projectile touches or crosses a wall tile.
+
+    Gun bullets and thrown spears move more than one pixel per update, so this
+    checks both the projectile's final rect and the swept center line from the
+    previous frame.  Inflating wall rects by the projectile size approximates
+    swept-rect collision and prevents fast shots from slipping across tile
+    seams.
+    """
+    if tile_map is None:
+        return False
+
+    is_walkable = getattr(tile_map, "is_pixel_rect_walkable", None)
+    if callable(is_walkable) and not is_walkable(projectile_rect, include_exit=True):
+        return True
+
+    if previous_center is None:
+        return False
+
+    iter_wall_rects = getattr(tile_map, "iter_wall_rects_between", None)
+    if not callable(iter_wall_rects):
+        return False
+
+    start = (int(previous_center[0]), int(previous_center[1]))
+    end = projectile_rect.center
+    if start == end:
+        return False
+
+    inflate_x = max(2, projectile_rect.width)
+    inflate_y = max(2, projectile_rect.height)
+    for wall_rect in iter_wall_rects(start, end):
+        if wall_rect.inflate(inflate_x, inflate_y).clipline(start, end):
+            return True
+
+    return False
+
+
 # =========================
 # CONTEXT
 # =========================
@@ -380,12 +417,16 @@ class BulletProjectile(DictCompatible):
         )
         return cls(rect=rect, pos=pygame.Vector2(rect.x, rect.y), dir=d, damage=damage, speed=speed)
 
-    def update(self, monsters, damage_monster, screen_rect):
+    def update(self, monsters, damage_monster, screen_rect, tile_map=None):
+        previous_center = self.rect.center
         self.pos += self.dir * self.speed
         self.rect.x = int(self.pos.x)
         self.rect.y = int(self.pos.y)
 
         if not screen_rect.colliderect(self.rect):
+            return False
+
+        if projectile_blocked_by_wall(tile_map, self.rect, previous_center):
             return False
 
         for monster in monsters:
@@ -446,12 +487,18 @@ class SpearProjectile(DictCompatible):
             splash_range=weapon_data["splash_range"],
         )
 
-    def update(self, system, monsters, damage_monster, screen_rect):
+    def update(self, system, monsters, damage_monster, screen_rect, tile_map=None):
+        previous_center = self.rect.center
         self.pos += self.dir * self.speed
         self.rect.x = int(self.pos.x)
         self.rect.y = int(self.pos.y)
 
         if not screen_rect.colliderect(self.rect):
+            return False
+
+        if projectile_blocked_by_wall(tile_map, self.rect, previous_center):
+            system.last_spear_splash = False
+            system.last_spear_splash_damage = 0
             return False
 
         hit_monster = None
@@ -1102,7 +1149,7 @@ class WeaponSystem:
         )
         self.current.use(self, context)
 
-    def update(self, player, player_direction, monsters, damage_monster, screen_rect):
+    def update(self, player, player_direction, monsters, damage_monster, screen_rect, tile_map=None):
         self.flag_wave += 1
 
         if self.sword_slash is not None and not self.sword_slash.update():
@@ -1134,12 +1181,12 @@ class WeaponSystem:
 
         self.bullets = [
             bullet for bullet in self.bullets
-            if bullet.update(monsters, damage_monster, screen_rect)
+            if bullet.update(monsters, damage_monster, screen_rect, tile_map)
         ]
 
         self.spears = [
             spear for spear in self.spears
-            if spear.update(self, monsters, damage_monster, screen_rect)
+            if spear.update(self, monsters, damage_monster, screen_rect, tile_map)
         ]
 
         self.boomerangs = [
@@ -1599,9 +1646,9 @@ def use_weapon(player, player_direction, monsters, damage_monster, screen_rect, 
     _sync_exports_from_system()
 
 
-def update(player, player_direction, monsters, damage_monster, screen_rect):
+def update(player, player_direction, monsters, damage_monster, screen_rect, tile_map=None):
     _sync_system_from_exports()
-    _default_system.update(player, player_direction, monsters, damage_monster, screen_rect)
+    _default_system.update(player, player_direction, monsters, damage_monster, screen_rect, tile_map)
     _sync_exports_from_system()
 
 
