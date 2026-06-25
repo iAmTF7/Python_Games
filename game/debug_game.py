@@ -210,15 +210,14 @@ class IntegratedDebugGame:
         elif key == pygame.K_z:
             self.try_upgrade("hp")
         elif key == pygame.K_x:
-            self.try_upgrade("damage")
-        elif key == pygame.K_c:
-            self.try_upgrade("speed")
-        elif key == pygame.K_v:
             self.try_upgrade("armor")
+        elif key == pygame.K_c:
+            self.try_upgrade("energy")
 
     def try_upgrade(self, stat_name: str) -> None:
         if self.stat_system.upgrade(stat_name):
-            self.log(f"Upgraded {stat_name}")
+            labels = {"hp": "HP", "armor": "armor", "energy": "energy"}
+            self.log(f"Upgraded {labels.get(stat_name, stat_name)}")
         else:
             self.log("No stat points available")
 

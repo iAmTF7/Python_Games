@@ -655,7 +655,12 @@ class BoomerangProjectile(DictCompatible):
             size=weapon_data["size"],
         )
 
-    def update(self, player, monsters, damage_monster):
+    def update(self, player, monsters, damage_monster, screen_rect=None, tile_map=None):
+        previous_center = self.rect.center
+        previous_pos = pygame.Vector2(self.pos.x, self.pos.y)
+        previous_rect = self.rect.copy()
+        was_returning = self.returning
+
         if not self.returning:
             self.pos += self.dir * self.speed
             self.timer -= 1
@@ -677,6 +682,21 @@ class BoomerangProjectile(DictCompatible):
 
         self.rect.x = int(self.pos.x)
         self.rect.y = int(self.pos.y)
+
+        if screen_rect is not None and not screen_rect.colliderect(self.rect):
+            return False
+
+        if projectile_blocked_by_wall(tile_map, self.rect, previous_center):
+            self.pos = previous_pos
+            self.rect = previous_rect
+
+            if was_returning:
+                return False
+
+            self.returning = True
+            self.timer = 0
+            self.hit_targets.clear()
+            return True
 
         for monster in monsters:
             rect = entity_rect(monster)
@@ -1261,7 +1281,7 @@ class WeaponSystem:
 
         self.boomerangs = [
             b for b in self.boomerangs
-            if b.update(player, monsters, damage_monster)
+            if b.update(player, monsters, damage_monster, screen_rect, tile_map)
         ]
 
         self.shockwaves = [

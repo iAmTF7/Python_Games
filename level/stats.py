@@ -3,12 +3,13 @@
 This keeps the original mechanics intact:
 - A stat can only be upgraded when ``player.stat_points > 0``.
 - HP upgrade: ``max_hp += 20``, ``hp = max_hp``, spend 1 point.
-- Damage upgrade: ``damage += 5``, spend 1 point.
-- Speed upgrade: ``speed += 0.5``, spend 1 point.
 - Armor upgrade: ``max_armor += 10``, ``armor = max_armor``, spend 1 point.
+- Energy upgrade: ``max_energy += 20``, ``energy = max_energy``, spend 1 point.
+- Damage and speed upgrades still exist for compatibility, but the debug runner now
+  exposes HP / armor / energy as the manually selectable resource upgrades.
 
-The old functions still exist for compatibility:
-``upgrade_hp``, ``upgrade_damage``, ``upgrade_speed``, and ``upgrade_armor``.
+The old functions still exist for compatibility, and ``upgrade_energy`` is now
+available too.
 """
 
 from __future__ import annotations
@@ -81,6 +82,16 @@ class ArmorUpgrade(StatUpgrade):
         player.armor = player.max_armor
 
 
+@dataclass(frozen=True)
+class EnergyUpgrade(StatUpgrade):
+    name: str = "energy"
+    amount: int = 20
+
+    def apply_effect(self, player: Any) -> None:
+        player.max_energy += self.amount
+        player.energy = player.max_energy
+
+
 class StatUpgradeSystem:
     """Owns player stat upgrades."""
 
@@ -95,9 +106,11 @@ class StatUpgradeSystem:
     def default_upgrades() -> tuple[StatUpgrade, ...]:
         return (
             HpUpgrade(),
+            ArmorUpgrade(),
+            EnergyUpgrade(),
+            # Compatibility upgrades: not shown in the default debug HUD.
             DamageUpgrade(),
             SpeedUpgrade(),
-            ArmorUpgrade(),
         )
 
     def bind_player(self, player: Any) -> None:
@@ -127,6 +140,9 @@ class StatUpgradeSystem:
     def upgrade_armor(self) -> bool:
         return self.upgrade("armor")
 
+    def upgrade_energy(self) -> bool:
+        return self.upgrade("energy")
+
     def update(self, state: Any = None) -> None:
         """Compatibility hook for the shared system architecture."""
         return None
@@ -150,3 +166,8 @@ def upgrade_speed(player: Any) -> None:
 def upgrade_armor(player: Any) -> None:
     """Backward-compatible armor upgrade function."""
     StatUpgradeSystem(player).upgrade_armor()
+
+
+def upgrade_energy(player: Any) -> None:
+    """Backward-compatible energy upgrade function."""
+    StatUpgradeSystem(player).upgrade_energy()

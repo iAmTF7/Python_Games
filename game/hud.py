@@ -47,12 +47,12 @@ class GameHUD:
     CARD_TITLE_HEIGHT = 40
     CARD_GAP = 14
     STATUS_CARD_HEIGHT = 168
-    RUN_CARD_HEIGHT = 250
-    CONTROLS_CARD_HEIGHT = 268
+    RUN_CARD_HEIGHT = 268
+    CONTROLS_CARD_HEIGHT = 248
     STAT_ROW_HEIGHT = 38
     STAT_ICON_SIZE = 30
     STAT_TRACK_HEIGHT = 18
-    CONTROL_ROW_HEIGHT = 36
+    CONTROL_ROW_HEIGHT = 34
     CONTROL_ITEM_GAP = 8
 
     def __init__(
@@ -166,6 +166,17 @@ class GameHUD:
                 color=stat.color,
             )
             row_y += self.STAT_ROW_HEIGHT
+
+        points = max(0, int(getattr(player, "stat_points", 0)))
+        points_color = self.WARNING if points else self.MUTED
+        self._text(
+            surface,
+            f"UPGRADE PTS {points}   Z HP  X AR  C EN",
+            x + self.CARD_PADDING_X,
+            card.bottom - 21,
+            points_color,
+            self.small_font,
+        )
         return card.bottom
 
     def _draw_run_card(
@@ -207,6 +218,7 @@ class GameHUD:
             width - self.CARD_PADDING_X * 2,
             room_reached,
             leaderboard,
+            max_y=card.bottom - 8,
         )
         return card.bottom
 
@@ -218,22 +230,49 @@ class GameHUD:
         width: int,
         room_reached: int,
         leaderboard: Sequence[object],
+        *,
+        max_y: int | None = None,
     ) -> None:
-        self._text(surface, "LEADERBOARD", x, y, self.TEXT, self.small_font)
-        y += 20
-        self._text(surface, "RUN", x, y, self.MUTED, self.small_font)
-        self._text(surface, f"Room {max(1, int(room_reached))}", x + 80, y, self.WARNING, self.small_font)
-        y += 20
+        previous_clip = surface.get_clip()
+        if max_y is not None:
+            clip_height = max(0, max_y - y)
+            surface.set_clip(pygame.Rect(x, y, width, clip_height))
 
-        if not leaderboard:
-            self._text(surface, "No saved runs yet", x, y, self.MUTED, self.small_font)
-            return
+        try:
+            self._text(surface, "LEADERBOARD", x, y, self.TEXT, self.small_font)
+            y += 20
+            self._text(surface, "RUN", x, y, self.MUTED, self.small_font)
+            self._text(surface, f"Room {max(1, int(room_reached))}", x + 80, y, self.WARNING, self.small_font)
+            y += 20
 
-        for rank, entry in enumerate(leaderboard[:5], start=1):
-            room = self._entry_room(entry)
-            self._text(surface, f"#{rank}", x, y, self.MUTED, self.small_font)
-            self._text(surface, f"Room {room}", x + 80, y, self.TEXT, self.small_font)
-            y += 18
+            if not leaderboard:
+                self._text(surface, "No saved runs yet", x, y, self.MUTED, self.small_font)
+                return
+
+            entries = list(leaderboard)
+            omitted = 0
+            if max_y is not None:
+                available_rows = max(0, (max_y - y) // 18)
+                if len(entries) > available_rows:
+                    if available_rows >= 2:
+                        visible_count = available_rows - 1
+                        omitted = len(entries) - visible_count
+                        entries = entries[:visible_count]
+                    else:
+                        omitted = len(entries)
+                        entries = []
+
+            for rank, entry in enumerate(entries, start=1):
+                room = self._entry_room(entry)
+                self._text(surface, f"#{rank}", x, y, self.MUTED, self.small_font)
+                self._text(surface, f"Room {room}", x + 80, y, self.TEXT, self.small_font)
+                y += 18
+
+            if omitted:
+                self._text(surface, f"+{omitted} more saved", x, y, self.MUTED, self.small_font)
+        finally:
+            if max_y is not None:
+                surface.set_clip(previous_clip)
 
     @staticmethod
     def _entry_room(entry: object) -> int:
@@ -361,7 +400,7 @@ class GameHUD:
             (("keys", ("1", "7")), ("key", "I"), ("icon", "list")),
             (("key", "F1"), ("icon", "target"), ("key", "P"), ("icon", "pause"), ("key", "R"), ("icon", "reset")),
             (("key", "M"), ("icon", "monster"), ("key", "H"), ("icon", "gem"), ("key", "L"), ("icon", "star")),
-            (("key_group", ("Z", "X", "C", "V")), ("icon", "upgrade"), ("icon", "heart"), ("icon", "sword"), ("icon", "bolt"), ("icon", "shield")),
+            (("key", "Z"), ("icon", "heart"), ("key", "X"), ("icon", "shield"), ("key", "C"), ("icon", "bolt")),
         ]
 
     def _draw_control_row(
