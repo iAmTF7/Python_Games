@@ -1,0 +1,24 @@
+{
+  "entries": [
+    {
+      "room_reached": 2,
+      "recorded_at": "2026-06-25T14:13:25+00:00"
+    },
+    {
+      "room_reached": 2,
+      "recorded_at": "2026-06-26T02:13:08+00:00"
+    },
+    {
+      "room_reached": 1,
+      "recorded_at": "2026-06-25T14:20:41+00:00"
+    },
+    {
+      "room_reached": 1,
+      "recorded_at": "2026-06-25T14:31:56+00:00"
+    },
+    {
+      "room_reached": 1,
+      "recorded_at": "2026-06-25T18:36:02+00:00"
+    }
+  ]
+}

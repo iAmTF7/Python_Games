@@ -1,31 +1,21 @@
-"""Monster package.
+"""Monster package public API."""
 
-Canonical OOP monster module for the game.
-
-Exports the public classes so other modules can import from ``monster``
-instead of reaching into the internal sub-packages.
-"""
-
-from .Entity.base import Entity
-from .Monster.base import Monster
-from .Monster.melee import MeleeMonster
-from .Monster.ranged import RangedMonster
-from .Combat.projectile import Projectile
-from .Combat.spawner import MonsterSpawner
-from .Config.settings import Colors, Settings, MonsterConfig
+from .base import Monster
+from .config import Colors, MonsterConfig, Settings
+from .entity import Entity
+from .melee import MeleeMonster
+from .projectile import Projectile
+from .ranged import RangedMonster
+from .spawner import MonsterSpawner
 
 __all__ = [
-    "Entity",
-    "Monster",
-    "MeleeMonster",
-    "RangedMonster",
-    "Projectile",
-    "MonsterSpawner",
     "Colors",
-    "Settings",
+    "Entity",
+    "MeleeMonster",
+    "Monster",
     "MonsterConfig",
+    "MonsterSpawner",
+    "Projectile",
+    "RangedMonster",
+    "Settings",
 ]
-
-__version__ = "1.1.0"
-__author__ = "Thanh"
-__part__ = "Combat cua quai"

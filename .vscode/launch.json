@@ -1,5 +1,6 @@
-// .vscode/launch.json
 {
+  // VS Code debug configurations for the refactored project.
+  // Open the Proj folder itself as the workspace root, then press F5.
   "version": "0.2.0",
   "configurations": [
     {
@@ -11,14 +12,35 @@
       "console": "integratedTerminal",
       "env": {
         "PYTHONPATH": "${workspaceFolder}"
-      }
+      },
+      "justMyCode": false
     },
     {
-      "name": "Python: Debug Pytest Tests",
+      "name": "Tests: Debug Current Test File",
       "type": "debugpy",
       "request": "launch",
-      "program": "${file}",
-      "purpose": ["debug-test"],
+      "module": "pytest",
+      "args": [
+        "${file}",
+        "-q"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}",
+        "SDL_VIDEODRIVER": "dummy"
+      },
+      "justMyCode": false
+    },
+    {
+      "name": "Tests: Debug All Tests",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": [
+        "tests",
+        "-q"
+      ],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "env": {

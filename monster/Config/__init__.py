@@ -1,6 +1,3 @@
-# Config Sub-Package - Cấu hình game
-"""
-Chứa các hằng số, màu sắc và cấu hình cho hệ thống combat quái.
-"""
+from ..config import Colors, MonsterConfig, Settings
 
-from .settings import Settings, Colors, MonsterConfig
+__all__ = ["Colors", "MonsterConfig", "Settings"]

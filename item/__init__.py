@@ -1,17 +1,11 @@
 """Item package public API."""
 
-from .drop import DropTable, ItemPickupSystem, create_drop, pickup_item
-from .item import (
-    ALL_ITEM_TYPES,
-    ITEM_EFFECTS,
-    NORMAL_ITEM_TYPES,
-    SPECIAL_ITEM_TYPES,
-    Item,
-    ItemEffect,
-    ItemFactory,
-    RestoreStatEffect,
-    UnlockRegenEffect,
-)
+from .base import Item
+from .config import ALL_ITEM_TYPES, NORMAL_ITEM_TYPES, SPECIAL_ITEM_TYPES, RandomLike
+from .effects import ITEM_EFFECTS, ItemEffect, RestoreStatEffect, UnlockRegenEffect
+from .factory import ItemFactory
+from .legacy import create_drop, pickup_item
+from .system import DropTable, ItemPickupSystem
 
 __all__ = [
     "ALL_ITEM_TYPES",
@@ -22,6 +16,7 @@ __all__ = [
     "ItemFactory",
     "ItemPickupSystem",
     "NORMAL_ITEM_TYPES",
+    "RandomLike",
     "RestoreStatEffect",
     "SPECIAL_ITEM_TYPES",
     "UnlockRegenEffect",

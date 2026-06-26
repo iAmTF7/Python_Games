@@ -20,6 +20,7 @@ class GameState:
     items: list[Any] = field(default_factory=list)
 
     level: int = 1
+    room_reached: int = 1
     score: int = 0
     running: bool = True
     paused: bool = False
