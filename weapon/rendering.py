@@ -9,6 +9,7 @@ import pygame
 from .constants import *
 from .physics import entity_rect, normalized_direction, rotate
 
+
 # =========================
 # DRAW HELPERS
 # =========================
@@ -20,26 +21,38 @@ def _active_system():
 
 def get_flag_angle():
     system = _active_system()
+
     if system.flag_swing is None:
         return 0
+
     return system.flag_swing.angle()
 
 
 def build_flag_attack_polygon(player):
     system = _active_system()
+
     if system.flag_swing is None:
         return []
+
     return system.flag_swing.build_polygon(player)
 
 
 def update_flag_hitbox(player, monsters, damage_monster):
     system = _active_system()
+
     if system.flag_swing is None:
         system.flag_attack_direction = pygame.Vector2(0, 1)
         return
+
     if system.current.name != "Flag":
         return
-    system.flag_swing.update_hitbox(player, monsters, damage_monster, system.current.data["damage"])
+
+    system.flag_swing.update_hitbox(
+        player,
+        monsters,
+        damage_monster,
+        system.current.data["damage"],
+    )
 
 
 def draw_flag_cloth(screen, px, py, direction, system=None):
@@ -82,9 +95,15 @@ def draw_flag(screen, player, player_direction, system=None):
     rect = entity_rect(player)
 
     if system.flag_swing is not None:
-        d = pygame.Vector2(system.flag_swing.direction.x, system.flag_swing.direction.y)
+        d = pygame.Vector2(
+            system.flag_swing.direction.x,
+            system.flag_swing.direction.y,
+        )
     else:
-        d = pygame.Vector2(player_direction.x, player_direction.y)
+        d = pygame.Vector2(
+            player_direction.x,
+            player_direction.y,
+        )
 
     d = normalized_direction(d)
 
@@ -93,8 +112,21 @@ def draw_flag(screen, player, player_direction, system=None):
 
     end = pygame.Vector2(rect.centerx, rect.centery) + d * 52
 
-    pygame.draw.line(screen, BROWN, rect.center, (int(end.x), int(end.y)), 6)
-    pygame.draw.circle(screen, LIGHT_GRAY, (int(end.x), int(end.y)), 7)
+    pygame.draw.line(
+        screen,
+        BROWN,
+        rect.center,
+        (int(end.x), int(end.y)),
+        6,
+    )
+
+    pygame.draw.circle(
+        screen,
+        LIGHT_GRAY,
+        (int(end.x), int(end.y)),
+        7,
+    )
+
     draw_flag_cloth(screen, end.x, end.y, d, system)
 
 
@@ -195,5 +227,16 @@ def draw_dual_blades_in_hand(screen, player, player_direction):
         5,
     )
 
-    pygame.draw.circle(screen, WHITE, (int(long_start.x), int(long_start.y)), 4)
-    pygame.draw.circle(screen, WHITE, (int(short_start.x), int(short_start.y)), 4)
+    pygame.draw.circle(
+        screen,
+        WHITE,
+        (int(long_start.x), int(long_start.y)),
+        4,
+    )
+
+    pygame.draw.circle(
+        screen,
+        WHITE,
+        (int(short_start.x), int(short_start.y)),
+        4,
+    )

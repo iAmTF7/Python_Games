@@ -24,6 +24,24 @@ class HudStat:
     color: tuple[int, int, int]
 
 
+@dataclass(frozen=True)
+class HudLayout:
+    """Computed HUD layout for the current display height.
+
+    The gameplay resolution can now change independently from the HUD. This
+    layout object keeps HUD cards inside the visible display surface instead of
+    relying on one fixed 768px-tall window.
+    """
+
+    panel_padding: int
+    card_gap: int
+    status_card_height: int
+    run_card_height: int
+    controls_card_height: int
+    control_row_height: int
+    show_messages: bool
+
+
 class GameHUD:
     """Right-side game HUD with status sliders and icon-only controls."""
 
@@ -48,12 +66,19 @@ class GameHUD:
     CARD_GAP = 14
     STATUS_CARD_HEIGHT = 168
     RUN_CARD_HEIGHT = 268
-    CONTROLS_CARD_HEIGHT = 248
+    CONTROLS_CARD_HEIGHT = 254
     STAT_ROW_HEIGHT = 38
     STAT_ICON_SIZE = 30
     STAT_TRACK_HEIGHT = 18
     CONTROL_ROW_HEIGHT = 34
     CONTROL_ITEM_GAP = 8
+
+    MIN_STATUS_CARD_HEIGHT = 138
+    MIN_RUN_CARD_HEIGHT = 150
+    MIN_CONTROLS_CARD_HEIGHT = 192
+    MIN_CONTROL_ROW_HEIGHT = 27
+    MIN_BOTTOM_PADDING = 16
+    MESSAGE_AREA_HEIGHT = 42
 
     def __init__(
         self,
@@ -87,15 +112,24 @@ class GameHUD:
         leaderboard: Sequence[object] = (),
     ) -> None:
         self._draw_panel(surface)
-        x = self.map_width + self.PANEL_PADDING
-        y = self.PANEL_PADDING
-        content_width = self.width - self.PANEL_PADDING * 2
+        layout = self._make_layout(surface.get_height())
+        x = self.map_width + layout.panel_padding
+        y = layout.panel_padding
+        content_width = self.width - layout.panel_padding * 2
+        panel_bottom = surface.get_height() - layout.panel_padding
 
-        y = self._draw_status_card(surface, x, y, content_width, player)
+        y = self._draw_status_card(
+            surface,
+            x,
+            y,
+            content_width,
+            player,
+            height=layout.status_card_height,
+        )
         y = self._draw_run_card(
             surface,
             x,
-            y + self.CARD_GAP,
+            y + layout.card_gap,
             content_width,
             player,
             tile_map,
@@ -106,13 +140,128 @@ class GameHUD:
             score,
             room_reached,
             leaderboard,
+            height=layout.run_card_height,
         )
-        y = self._draw_controls_card(surface, x, y + self.CARD_GAP, content_width)
-        self._draw_messages(surface, x, y + self.CARD_GAP, messages)
+        y = self._draw_controls_card(
+            surface,
+            x,
+            y + layout.card_gap,
+            content_width,
+            height=layout.controls_card_height,
+            row_height=layout.control_row_height,
+        )
+        if layout.show_messages:
+            self._draw_messages(surface, x, y + layout.card_gap, messages, max_y=panel_bottom)
 
     # ------------------------------------------------------------------
     # Cards / layout
     # ------------------------------------------------------------------
+    def _make_layout(self, surface_height: int) -> HudLayout:
+        """Return a HUD layout that fits inside the current display height.
+
+        The HUD must fit inside the Pygame display surface, not merely inside
+        the OS window around it.  This method keeps top/bottom padding
+        mandatory and, on compact resolutions, stops the run-info card from
+        expanding just because spare pixels exist.  That leaves visible room
+        below the controls card instead of making the bottom shortcut row feel
+        clipped against the window edge.
+        """
+        if surface_height <= 0:
+            return HudLayout(
+                panel_padding=0,
+                card_gap=0,
+                status_card_height=0,
+                run_card_height=0,
+                controls_card_height=0,
+                control_row_height=self.MIN_CONTROL_ROW_HEIGHT,
+                show_messages=False,
+            )
+
+        panel_padding = min(self.PANEL_PADDING, max(8, surface_height // 48))
+        bottom_padding = min(self.MIN_BOTTOM_PADDING, panel_padding)
+        card_gap = 12 if surface_height >= 760 else 10 if surface_height >= 650 else 8
+        card_budget = max(0, surface_height - panel_padding - bottom_padding - card_gap * 2)
+
+        full_controls_height = self._controls_card_height_for(self.CONTROL_ROW_HEIGHT)
+        full_cards_height = self.STATUS_CARD_HEIGHT + self.RUN_CARD_HEIGHT + full_controls_height
+        if card_budget >= full_cards_height + self.MESSAGE_AREA_HEIGHT:
+            return HudLayout(
+                panel_padding=panel_padding,
+                card_gap=card_gap,
+                status_card_height=self.STATUS_CARD_HEIGHT,
+                run_card_height=self.RUN_CARD_HEIGHT,
+                controls_card_height=full_controls_height,
+                control_row_height=self.CONTROL_ROW_HEIGHT,
+                show_messages=True,
+            )
+
+        # Compact presets: keep the controls fully visible, but avoid using the
+        # entire vertical budget for the cards.  The spare pixels become real
+        # bottom breathing room (and, when enough exists, a message area).
+        if surface_height >= 760:
+            control_row_height = 31
+            status_height = 158
+            run_height = 232
+        elif surface_height >= 720:
+            control_row_height = 30
+            status_height = 150
+            run_height = 224
+        elif surface_height >= 680:
+            control_row_height = 28
+            status_height = 144
+            run_height = 212
+        else:
+            control_row_height = self.MIN_CONTROL_ROW_HEIGHT
+            status_height = self.MIN_STATUS_CARD_HEIGHT
+            run_height = 198
+
+        controls_height = self._controls_card_height_for(control_row_height)
+        status_height = max(self.MIN_STATUS_CARD_HEIGHT, min(self.STATUS_CARD_HEIGHT, status_height))
+        run_height = max(self.MIN_RUN_CARD_HEIGHT, min(self.RUN_CARD_HEIGHT, run_height))
+
+        total_cards = status_height + run_height + controls_height
+        if total_cards > card_budget:
+            overflow = total_cards - card_budget
+            reducible_run = max(0, run_height - self.MIN_RUN_CARD_HEIGHT)
+            reduction = min(reducible_run, overflow)
+            run_height -= reduction
+            overflow -= reduction
+
+            if overflow:
+                reducible_status = max(0, status_height - self.MIN_STATUS_CARD_HEIGHT)
+                reduction = min(reducible_status, overflow)
+                status_height -= reduction
+                overflow -= reduction
+
+            # Last resort for very small windows: shrink the control rows and
+            # recalculate the card height, but never below the minimum row size.
+            while overflow > 0 and control_row_height > self.MIN_CONTROL_ROW_HEIGHT:
+                control_row_height -= 1
+                new_controls_height = self._controls_card_height_for(control_row_height)
+                overflow -= controls_height - new_controls_height
+                controls_height = new_controls_height
+
+            if overflow > 0:
+                controls_height = max(self.MIN_CONTROLS_CARD_HEIGHT, controls_height - overflow)
+
+        used_height = status_height + card_gap + run_height + card_gap + controls_height
+        spare_after_cards = surface_height - panel_padding - used_height
+        show_messages = spare_after_cards >= self.MESSAGE_AREA_HEIGHT
+
+        return HudLayout(
+            panel_padding=panel_padding,
+            card_gap=card_gap,
+            status_card_height=status_height,
+            run_card_height=run_height,
+            controls_card_height=controls_height,
+            control_row_height=control_row_height,
+            show_messages=show_messages,
+        )
+
+    def _controls_card_height_for(self, row_height: int) -> int:
+        """Return the smallest safe card height for all configured control rows."""
+        return self.CARD_TITLE_HEIGHT + len(self.control_rows) * row_height + 10
+
     def _draw_panel(self, surface: pygame.Surface) -> None:
         panel = pygame.Rect(self.map_width, 0, self.width, surface.get_height())
         pygame.draw.rect(surface, self.PANEL_BG, panel)
@@ -149,8 +298,10 @@ class GameHUD:
         y: int,
         width: int,
         player: object,
+        *,
+        height: int,
     ) -> int:
-        card = pygame.Rect(x, y, width, self.STATUS_CARD_HEIGHT)
+        card = pygame.Rect(x, y, width, height)
         row_y = self._draw_card(surface, card, "PLAYER HUD")
         for stat in self.STATS:
             current = float(getattr(player, stat.current_attr, 0))
@@ -167,16 +318,20 @@ class GameHUD:
             )
             row_y += self.STAT_ROW_HEIGHT
 
-        points = max(0, int(getattr(player, "stat_points", 0)))
-        points_color = self.WARNING if points else self.MUTED
-        self._text(
-            surface,
-            f"UPGRADE PTS {points}   Z HP  X AR  C EN",
-            x + self.CARD_PADDING_X,
-            card.bottom - 21,
-            points_color,
-            self.small_font,
-        )
+        points_y = card.bottom - 21
+        # Compact HUD heights prioritize the sliders; draw upgrade shortcuts only
+        # when there is enough vertical room to avoid text overlapping a bar.
+        if points_y >= row_y - 8:
+            points = max(0, int(getattr(player, "stat_points", 0)))
+            points_color = self.WARNING if points else self.MUTED
+            self._text(
+                surface,
+                f"UPGRADE PTS {points}   Z HP  X AR  C EN",
+                x + self.CARD_PADDING_X,
+                points_y,
+                points_color,
+                self.small_font,
+            )
         return card.bottom
 
     def _draw_run_card(
@@ -194,8 +349,10 @@ class GameHUD:
         score: int,
         room_reached: int,
         leaderboard: Sequence[object],
+        *,
+        height: int,
     ) -> int:
-        card = pygame.Rect(x, y, width, self.RUN_CARD_HEIGHT)
+        card = pygame.Rect(x, y, width, height)
         row_y = self._draw_card(surface, card, "RUN INFO")
         rows = [
             ("ROOM", str(getattr(tile_map, "level", 0) + 1)),
@@ -291,20 +448,31 @@ class GameHUD:
         x: int,
         y: int,
         width: int,
+        *,
+        height: int,
+        row_height: int,
     ) -> int:
-        card = pygame.Rect(x, y, width, self.CONTROLS_CARD_HEIGHT)
-        row_y = self._draw_card(surface, card, "CONTROLS")
-        row_bg_width = width - self.CARD_PADDING_X * 2
-        for row in self.control_rows:
-            row_bg = pygame.Rect(
-                x + self.CARD_PADDING_X - 4,
-                row_y - 2,
-                row_bg_width + 8,
-                self.CONTROL_ROW_HEIGHT - 2,
-            )
-            pygame.draw.rect(surface, (28, 30, 38), row_bg, border_radius=8)
-            self._draw_control_row(surface, x + self.CARD_PADDING_X, row_y, row)
-            row_y += self.CONTROL_ROW_HEIGHT
+        card = pygame.Rect(x, y, width, height)
+        previous_clip = surface.get_clip()
+        surface.set_clip(card)
+        try:
+            row_y = self._draw_card(surface, card, "CONTROLS")
+            row_bg_width = width - self.CARD_PADDING_X * 2
+            max_row_y = card.bottom - 6
+            for row in self.control_rows:
+                if row_y + 18 > max_row_y:
+                    break
+                row_bg = pygame.Rect(
+                    x + self.CARD_PADDING_X - 4,
+                    row_y - 2,
+                    row_bg_width + 8,
+                    max(18, row_height - 2),
+                )
+                pygame.draw.rect(surface, (28, 30, 38), row_bg, border_radius=8)
+                self._draw_control_row(surface, x + self.CARD_PADDING_X, row_y, row)
+                row_y += row_height
+        finally:
+            surface.set_clip(previous_clip)
         return card.bottom
 
     def _draw_messages(
@@ -313,8 +481,12 @@ class GameHUD:
         x: int,
         y: int,
         messages: Iterable[object],
+        *,
+        max_y: int,
     ) -> None:
         for msg in list(messages)[-4:]:
+            if y + 16 > max_y:
+                break
             text = str(getattr(msg, "text", msg))
             self._text(surface, text, x, y, self.WARNING, self.small_font)
             y += 18

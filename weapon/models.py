@@ -77,70 +77,8 @@ def damage_monsters_on_line(context, start, end, width, damage):
         context.damage_monster(monster, damage)
 
 
-def clip_line_end_for_melee_visual(tile_map, start, end, step=4):
-    if tile_map is None:
-        return end
-
-    start = pygame.Vector2(start)
-    end = pygame.Vector2(end)
-
-    direction = end - start
-    distance = direction.length()
-
-    if distance <= 0:
-        return end
-
-    direction = direction.normalize()
-    last_safe = pygame.Vector2(start.x, start.y)
-
-    is_walkable = getattr(tile_map, "is_pixel_rect_walkable", None)
-
-    if callable(is_walkable):
-        steps = max(1, int(distance // step))
-
-        for i in range(1, steps + 1):
-            point = start + direction * step * i
-
-            test_rect = pygame.Rect(
-                int(point.x) - 3,
-                int(point.y) - 3,
-                6,
-                6,
-            )
-
-            if not is_walkable(test_rect, include_exit=True):
-                return last_safe
-
-            last_safe = pygame.Vector2(point.x, point.y)
-
-        return end
-
-    iter_wall_rects = getattr(tile_map, "iter_wall_rects_between", None)
-
-    if callable(iter_wall_rects):
-        line_start = (int(start.x), int(start.y))
-        line_end = (int(end.x), int(end.y))
-
-        nearest_distance = None
-        nearest_point = None
-
-        for wall_rect in iter_wall_rects(line_start, line_end):
-            clipped = wall_rect.clipline(line_start, line_end)
-
-            if not clipped:
-                continue
-
-            hit_point = pygame.Vector2(clipped[0])
-            hit_distance = start.distance_to(hit_point)
-
-            if nearest_distance is None or hit_distance < nearest_distance:
-                nearest_distance = hit_distance
-                nearest_point = hit_point
-
-        if nearest_point is not None:
-            return start + direction * max(0, nearest_distance - 4)
-
-    return end
+def clip_line_end_for_melee_visual(tile_map, start, end):
+    return clip_line_end_by_wall(tile_map, start, end)
 
 
 @dataclass
@@ -158,9 +96,12 @@ class BulletProjectile(DictCompatible):
         d = normalized_direction(player_direction)
         player_rect = entity_rect(player)
 
+        spawn_offset = max(player_rect.width, player_rect.height) // 2 + size
+        spawn_center = pygame.Vector2(player_rect.centerx, player_rect.centery) + d * spawn_offset
+
         rect = pygame.Rect(
-            player_rect.centerx - size // 2,
-            player_rect.centery - size // 2,
+            int(spawn_center.x) - size // 2,
+            int(spawn_center.y) - size // 2,
             size,
             size,
         )
@@ -228,11 +169,15 @@ class SpearProjectile(DictCompatible):
         d = normalized_direction(player_direction)
         player_rect = entity_rect(player)
 
+        size = weapon_data["size"]
+        spawn_offset = max(player_rect.width, player_rect.height) // 2 + size
+        spawn_center = pygame.Vector2(player_rect.centerx, player_rect.centery) + d * spawn_offset
+
         rect = pygame.Rect(
-            player_rect.centerx - weapon_data["size"] // 2,
-            player_rect.centery - weapon_data["size"] // 2,
-            weapon_data["size"],
-            weapon_data["size"],
+            int(spawn_center.x) - size // 2,
+            int(spawn_center.y) - size // 2,
+            size,
+            size,
         )
 
         return cls(
@@ -241,7 +186,7 @@ class SpearProjectile(DictCompatible):
             dir=d,
             damage=weapon_data["damage"],
             speed=weapon_data["speed"],
-            size=weapon_data["size"],
+            size=size,
             splash_damage=weapon_data["splash_damage"],
             splash_chance=weapon_data["splash_chance"],
             splash_range=weapon_data["splash_range"],
@@ -297,8 +242,19 @@ class SpearProjectile(DictCompatible):
                 if monster is hit_monster:
                     continue
 
-                if monster_alive(monster) and rect_in_circle(entity_rect(monster), hit_pos, self.splash_range):
-                    damage_monster(monster, self.splash_damage)
+                rect = entity_rect(monster)
+                monster_center = pygame.Vector2(rect.centerx, rect.centery)
+
+                if not monster_alive(monster):
+                    continue
+
+                if not rect_in_circle(rect, hit_pos, self.splash_range):
+                    continue
+
+                if line_blocked_by_wall(tile_map, hit_pos, monster_center):
+                    continue
+
+                damage_monster(monster, self.splash_damage)
         else:
             system.last_spear_splash = False
             system.last_spear_splash_damage = 0
@@ -340,11 +296,15 @@ class BoomerangProjectile(DictCompatible):
         d = normalized_direction(player_direction)
         player_rect = entity_rect(player)
 
+        size = weapon_data["size"]
+        spawn_offset = max(player_rect.width, player_rect.height) // 2 + size
+        spawn_center = pygame.Vector2(player_rect.centerx, player_rect.centery) + d * spawn_offset
+
         rect = pygame.Rect(
-            player_rect.centerx - weapon_data["size"] // 2,
-            player_rect.centery - weapon_data["size"] // 2,
-            weapon_data["size"],
-            weapon_data["size"],
+            int(spawn_center.x) - size // 2,
+            int(spawn_center.y) - size // 2,
+            size,
+            size,
         )
 
         return cls(
@@ -355,7 +315,7 @@ class BoomerangProjectile(DictCompatible):
             speed=weapon_data["speed"],
             return_speed=weapon_data["return_speed"],
             timer=weapon_data["out_duration"],
-            size=weapon_data["size"],
+            size=size,
         )
 
     def update(self, player, monsters, damage_monster, screen_rect=None, tile_map=None):
@@ -454,28 +414,39 @@ class ShockwaveEffect(DictCompatible):
             knockback=weapon_data["knockback"],
         )
 
-    def update(self, monsters, damage_monster, screen_rect):
+    def update(self, monsters, damage_monster, screen_rect, tile_map=None):
         self.current_radius += self.expansion_speed
 
         if self.current_radius >= self.max_radius:
             return False
 
         for monster in monsters:
-            if monster_alive(monster) and monster not in self.hit_targets:
-                rect = entity_rect(monster)
+            if not monster_alive(monster):
+                continue
 
-                if rect_in_circle(rect, self.pos, self.current_radius):
-                    damage_monster(monster, self.damage)
-                    self.hit_targets.append(monster)
+            if monster in self.hit_targets:
+                continue
 
-                    m_center = pygame.Vector2(rect.centerx, rect.centery)
-                    push_dir = m_center - self.pos
+            rect = entity_rect(monster)
 
-                    if push_dir.length() > 0:
-                        push_dir = push_dir.normalize()
-                        rect.x += int(push_dir.x * self.knockback)
-                        rect.y += int(push_dir.y * self.knockback)
-                        rect.clamp_ip(screen_rect)
+            if not rect_in_circle(rect, self.pos, self.current_radius):
+                continue
+
+            monster_center = pygame.Vector2(rect.centerx, rect.centery)
+
+            if line_blocked_by_wall(tile_map, self.pos, monster_center):
+                continue
+
+            damage_monster(monster, self.damage)
+            self.hit_targets.append(monster)
+
+            push_dir = monster_center - self.pos
+
+            if push_dir.length() > 0:
+                push_dir = push_dir.normalize()
+                rect.x += int(push_dir.x * self.knockback)
+                rect.y += int(push_dir.y * self.knockback)
+                rect.clamp_ip(screen_rect)
 
         return True
 
@@ -642,28 +613,12 @@ class FlagSwingEffect:
         _, current_angle, _ = self.sweep_angles()
         return current_angle
 
-    def blocked_immediately_by_wall(self, player, tile_map=None):
-        active_tile_map = tile_map if tile_map is not None else self.tile_map
-
-        if active_tile_map is None:
-            return False
-
-        center = player_center(player)
-        d = self.attack_direction()
-        check_end = center + d * 28
-
-        return line_blocked_by_wall(active_tile_map, center, check_end)
-
     def clipped_point(self, tile_map, center, direction, distance):
         raw_point = center + direction * distance
         return clip_line_end_for_melee_visual(tile_map, center, raw_point)
 
     def build_polygon(self, player, tile_map=None):
         active_tile_map = tile_map if tile_map is not None else self.tile_map
-
-        if self.blocked_immediately_by_wall(player, active_tile_map):
-            self.polygon = []
-            return self.polygon
 
         center = player_center(player)
         base = self.attack_direction()
@@ -686,7 +641,12 @@ class FlagSwingEffect:
             angle = start_angle + (current_angle - start_angle) * t
             rotated = rotate(base, math.radians(angle))
 
-            outer_point = self.clipped_point(active_tile_map, center, rotated, outer)
+            outer_point = self.clipped_point(
+                active_tile_map,
+                center,
+                rotated,
+                outer,
+            )
 
             if center.distance_to(outer_point) <= inner:
                 inner_point = outer_point
@@ -730,37 +690,6 @@ class FlagSwingEffect:
 
         pygame.draw.polygon(screen, FLAG_DARK, polygon)
         pygame.draw.lines(screen, FLAG_LIGHT, True, polygon, 3)
-
-        center = player_center(player)
-        base = self.attack_direction()
-
-        params = self.fan_params()
-        inner = params["inner"]
-        outer = params["outer"]
-
-        _, current_angle, _ = self.sweep_angles()
-
-        sweep_dir = rotate(base, math.radians(current_angle))
-
-        if sweep_dir.length() == 0:
-            sweep_dir = pygame.Vector2(0, 1)
-
-        sweep_dir = sweep_dir.normalize()
-
-        p2 = self.clipped_point(self.tile_map, center, sweep_dir, outer)
-
-        if center.distance_to(p2) <= inner:
-            p1 = p2
-        else:
-            p1 = center + sweep_dir * inner
-
-        pygame.draw.line(
-            screen,
-            WHITE,
-            (int(p1.x), int(p1.y)),
-            (int(p2.x), int(p2.y)),
-            4,
-        )
 
     def draw_hitbox(self, screen):
         if len(self.polygon) >= 3:
@@ -895,7 +824,8 @@ class FlagWeapon(BaseWeapon):
         system.attack_cooldown_timer = self.cooldown
 
     def draw_icon(self, system, screen, player, player_direction):
-         draw_flag(screen, player, player_direction, system)
+        draw_flag(screen, player, player_direction, system)
+
 
 class SpearWeapon(BaseWeapon):
     def use(self, system, context):
@@ -914,33 +844,86 @@ class SpearWeapon(BaseWeapon):
 
 
 class DualBladesWeapon(BaseWeapon):
+    def _move_player_step(self, player, dx, dy, screen_rect, tile_map):
+        player_rect = entity_rect(player)
+
+        before = pygame.Vector2(player_rect.centerx, player_rect.centery)
+
+        move_player_rect = getattr(tile_map, "move_player_rect", None)
+
+        if callable(move_player_rect):
+            move_player_rect(player, dx, dy, screen_rect)
+        else:
+            test_rect = player_rect.copy()
+            test_rect.x += int(round(dx))
+            test_rect.y += int(round(dy))
+            test_rect.clamp_ip(screen_rect)
+
+            is_walkable = getattr(tile_map, "is_pixel_rect_walkable", None)
+
+            if not callable(is_walkable) or is_walkable(test_rect, include_exit=True):
+                player_rect.center = test_rect.center
+
+        after = pygame.Vector2(player_rect.centerx, player_rect.centery)
+
+        return before.distance_to(after) > 0.1
+
     def use(self, system, context):
         if system.attack_cooldown_timer > 0:
             return
 
+        player = context.player
         player_rect = context.player_rect
         d = context.direction
-        start = pygame.Vector2(player_rect.centerx, player_rect.centery)
-        target_pos = start + d * self.data["dash_distance"]
 
-        end = find_walkable_dash_end(
-            player_rect,
-            start,
-            target_pos,
-            context.screen_rect,
+        start = pygame.Vector2(player_rect.centerx, player_rect.centery)
+
+        dash_distance = self.data["dash_distance"]
+        step_size = 4
+        steps = max(1, int(dash_distance // step_size))
+
+        moved_any = False
+
+        for _ in range(steps):
+            moved = self._move_player_step(
+                player,
+                d.x * step_size,
+                d.y * step_size,
+                context.screen_rect,
+                context.tile_map,
+            )
+
+            if not moved:
+                break
+
+            moved_any = True
+
+        sync_player_tile_position_from_rect(
+            context.player,
             context.tile_map,
         )
 
-        player_rect.center = (int(end.x), int(end.y))
-        player_rect.clamp_ip(context.screen_rect)
-
         end = pygame.Vector2(player_rect.centerx, player_rect.centery)
+        moved_distance = start.distance_to(end)
 
-        sync_player_tile_position_from_rect(context.player, context.tile_map)
+        if not moved_any or moved_distance < 8:
+            raw_slash_end = start + d * min(45, dash_distance)
+
+            end = clip_line_end_for_melee_visual(
+                context.tile_map,
+                start,
+                raw_slash_end,
+            )
 
         width = self.data["slash_width"]
 
-        damage_monsters_on_line(context, start, end, width, self.data["damage"])
+        damage_monsters_on_line(
+            context,
+            start,
+            end,
+            width,
+            self.data["damage"],
+        )
 
         system.dash_slash = DashSlashEffect(
             start=start,
@@ -1035,16 +1018,22 @@ class WeaponSystem:
 
         if name == "Sword":
             return SwordWeapon(data)
+
         if name == "Gun":
             return GunWeapon(data)
+
         if name == "Flag":
             return FlagWeapon(data)
+
         if name == "Spear":
             return SpearWeapon(data)
+
         if name == "Dual Blades":
             return DualBladesWeapon(data)
+
         if name == "Boomerang":
             return BoomerangWeapon(data)
+
         if name == "Earthshaker":
             return EarthshakerWeapon(data)
 
@@ -1139,7 +1128,7 @@ class WeaponSystem:
         self.shockwaves = [
             wave
             for wave in self.shockwaves
-            if wave.update(monsters, damage_monster, screen_rect)
+            if wave.update(monsters, damage_monster, screen_rect, tile_map)
         ]
 
     def draw_weapon_icon(self, screen, player, player_direction):
