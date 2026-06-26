@@ -5,18 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import math
 import random
-<<<<<<< HEAD
-from typing import Iterable, Optional
-=======
->>>>>>> Tuyên
 
 import pygame
 
 from .constants import *
 from .physics import *
-<<<<<<< HEAD
-from .rendering import draw_dual_blades_in_hand, draw_flag, draw_spear_in_hand
-=======
 from .rendering import (
     draw_dual_blades_in_hand,
     draw_flag,
@@ -24,7 +17,6 @@ from .rendering import (
     draw_flying_spear,
 )
 
->>>>>>> Tuyên
 
 @dataclass
 class WeaponUseContext:
@@ -46,12 +38,6 @@ class WeaponUseContext:
         return normalized_direction(self.player_direction)
 
 
-<<<<<<< HEAD
-# =========================
-# DICT-COMPATIBLE OBJECT BASE
-# =========================
-=======
->>>>>>> Tuyên
 class DictCompatible:
     _fields: tuple[str, ...] = ()
 
@@ -73,11 +59,6 @@ class DictCompatible:
         return {key: getattr(self, key) for key in self._fields}
 
 
-<<<<<<< HEAD
-# =========================
-# PROJECTILES / ACTIVE EFFECTS
-# =========================
-=======
 def damage_monsters_on_line(context, start, end, width, damage):
     for monster in context.monsters:
         monster_rect = entity_rect(monster)
@@ -100,7 +81,6 @@ def clip_line_end_for_melee_visual(tile_map, start, end):
     return clip_line_end_by_wall(tile_map, start, end)
 
 
->>>>>>> Tuyên
 @dataclass
 class BulletProjectile(DictCompatible):
     rect: pygame.Rect
@@ -115,18 +95,6 @@ class BulletProjectile(DictCompatible):
     def create(cls, player, player_direction, damage, size=10, speed=9):
         d = normalized_direction(player_direction)
         player_rect = entity_rect(player)
-<<<<<<< HEAD
-        rect = pygame.Rect(
-            player_rect.centerx - size // 2,
-            player_rect.centery - size // 2,
-            size,
-            size,
-        )
-        return cls(rect=rect, pos=pygame.Vector2(rect.x, rect.y), dir=d, damage=damage, speed=speed)
-
-    def update(self, monsters, damage_monster, screen_rect, tile_map=None):
-        previous_center = self.rect.center
-=======
 
         spawn_offset = max(player_rect.width, player_rect.height) // 2 + size
         spawn_center = pygame.Vector2(player_rect.centerx, player_rect.centery) + d * spawn_offset
@@ -149,7 +117,6 @@ class BulletProjectile(DictCompatible):
     def update(self, monsters, damage_monster, screen_rect, tile_map=None):
         previous_center = self.rect.center
 
->>>>>>> Tuyên
         self.pos += self.dir * self.speed
         self.rect.x = int(self.pos.x)
         self.rect.y = int(self.pos.y)
@@ -162,10 +129,7 @@ class BulletProjectile(DictCompatible):
 
         for monster in monsters:
             rect = entity_rect(monster)
-<<<<<<< HEAD
-=======
 
->>>>>>> Tuyên
             if monster_alive(monster) and self.rect.colliderect(rect):
                 damage_monster(monster, self.damage)
                 return False
@@ -204,14 +168,6 @@ class SpearProjectile(DictCompatible):
     def create(cls, player, player_direction, weapon_data):
         d = normalized_direction(player_direction)
         player_rect = entity_rect(player)
-<<<<<<< HEAD
-        rect = pygame.Rect(
-            player_rect.centerx - weapon_data["size"] // 2,
-            player_rect.centery - weapon_data["size"] // 2,
-            weapon_data["size"],
-            weapon_data["size"],
-        )
-=======
 
         size = weapon_data["size"]
         spawn_offset = max(player_rect.width, player_rect.height) // 2 + size
@@ -224,18 +180,13 @@ class SpearProjectile(DictCompatible):
             size,
         )
 
->>>>>>> Tuyên
         return cls(
             rect=rect,
             pos=pygame.Vector2(rect.x, rect.y),
             dir=d,
             damage=weapon_data["damage"],
             speed=weapon_data["speed"],
-<<<<<<< HEAD
-            size=weapon_data["size"],
-=======
             size=size,
->>>>>>> Tuyên
             splash_damage=weapon_data["splash_damage"],
             splash_chance=weapon_data["splash_chance"],
             splash_range=weapon_data["splash_range"],
@@ -243,10 +194,7 @@ class SpearProjectile(DictCompatible):
 
     def update(self, system, monsters, damage_monster, screen_rect, tile_map=None):
         previous_center = self.rect.center
-<<<<<<< HEAD
-=======
 
->>>>>>> Tuyên
         self.pos += self.dir * self.speed
         self.rect.x = int(self.pos.x)
         self.rect.y = int(self.pos.y)
@@ -260,15 +208,10 @@ class SpearProjectile(DictCompatible):
             return False
 
         hit_monster = None
-<<<<<<< HEAD
-        for monster in monsters:
-            rect = entity_rect(monster)
-=======
 
         for monster in monsters:
             rect = entity_rect(monster)
 
->>>>>>> Tuyên
             if monster_alive(monster) and self.rect.colliderect(rect):
                 hit_monster = monster
                 break
@@ -278,17 +221,11 @@ class SpearProjectile(DictCompatible):
 
         hit_rect = entity_rect(hit_monster)
         hit_pos = pygame.Vector2(hit_rect.centerx, hit_rect.centery)
-<<<<<<< HEAD
-        damage_monster(hit_monster, self.damage)
-
-        splash_roll = random.randint(1, 100)
-=======
 
         damage_monster(hit_monster, self.damage)
 
         splash_roll = random.randint(1, 100)
 
->>>>>>> Tuyên
         if splash_roll <= self.splash_chance:
             system.spear_splash = SpearSplashEffect(
                 pos=hit_pos,
@@ -296,10 +233,7 @@ class SpearProjectile(DictCompatible):
                 damage=self.splash_damage,
                 radius=self.splash_range,
             )
-<<<<<<< HEAD
-=======
 
->>>>>>> Tuyên
             system.last_spear_splash = True
             system.last_spear_splash_damage = self.splash_damage
             system.last_spear_splash_range = self.splash_range
@@ -308,10 +242,6 @@ class SpearProjectile(DictCompatible):
                 if monster is hit_monster:
                     continue
 
-<<<<<<< HEAD
-                if monster_alive(monster) and rect_in_circle(entity_rect(monster), hit_pos, self.splash_range):
-                    damage_monster(monster, self.splash_damage)
-=======
                 rect = entity_rect(monster)
                 monster_center = pygame.Vector2(rect.centerx, rect.centery)
 
@@ -325,7 +255,6 @@ class SpearProjectile(DictCompatible):
                     continue
 
                 damage_monster(monster, self.splash_damage)
->>>>>>> Tuyên
         else:
             system.last_spear_splash = False
             system.last_spear_splash_damage = 0
@@ -366,14 +295,6 @@ class BoomerangProjectile(DictCompatible):
     def create(cls, player, player_direction, weapon_data):
         d = normalized_direction(player_direction)
         player_rect = entity_rect(player)
-<<<<<<< HEAD
-        rect = pygame.Rect(
-            player_rect.centerx - weapon_data["size"] // 2,
-            player_rect.centery - weapon_data["size"] // 2,
-            weapon_data["size"],
-            weapon_data["size"],
-        )
-=======
 
         size = weapon_data["size"]
         spawn_offset = max(player_rect.width, player_rect.height) // 2 + size
@@ -386,7 +307,6 @@ class BoomerangProjectile(DictCompatible):
             size,
         )
 
->>>>>>> Tuyên
         return cls(
             rect=rect,
             pos=pygame.Vector2(rect.x, rect.y),
@@ -395,11 +315,7 @@ class BoomerangProjectile(DictCompatible):
             speed=weapon_data["speed"],
             return_speed=weapon_data["return_speed"],
             timer=weapon_data["out_duration"],
-<<<<<<< HEAD
-            size=weapon_data["size"],
-=======
             size=size,
->>>>>>> Tuyên
         )
 
     def update(self, player, monsters, damage_monster, screen_rect=None, tile_map=None):
@@ -447,10 +363,7 @@ class BoomerangProjectile(DictCompatible):
 
         for monster in monsters:
             rect = entity_rect(monster)
-<<<<<<< HEAD
-=======
 
->>>>>>> Tuyên
             if monster_alive(monster) and self.rect.colliderect(rect):
                 if monster not in self.hit_targets:
                     damage_monster(monster, self.damage)
@@ -491,10 +404,7 @@ class ShockwaveEffect(DictCompatible):
     @classmethod
     def create(cls, player, weapon_data):
         rect = entity_rect(player)
-<<<<<<< HEAD
-=======
 
->>>>>>> Tuyên
         return cls(
             pos=pygame.Vector2(rect.centerx, rect.centery),
             current_radius=10,
@@ -504,33 +414,13 @@ class ShockwaveEffect(DictCompatible):
             knockback=weapon_data["knockback"],
         )
 
-<<<<<<< HEAD
-    def update(self, monsters, damage_monster, screen_rect):
-=======
     def update(self, monsters, damage_monster, screen_rect, tile_map=None):
->>>>>>> Tuyên
         self.current_radius += self.expansion_speed
 
         if self.current_radius >= self.max_radius:
             return False
 
         for monster in monsters:
-<<<<<<< HEAD
-            if monster_alive(monster) and monster not in self.hit_targets:
-                rect = entity_rect(monster)
-                if rect_in_circle(rect, self.pos, self.current_radius):
-                    damage_monster(monster, self.damage)
-                    self.hit_targets.append(monster)
-
-                    m_center = pygame.Vector2(rect.centerx, rect.centery)
-                    push_dir = m_center - self.pos
-
-                    if push_dir.length() > 0:
-                        push_dir = push_dir.normalize()
-                        rect.x += int(push_dir.x * self.knockback)
-                        rect.y += int(push_dir.y * self.knockback)
-                        rect.clamp_ip(screen_rect)
-=======
             if not monster_alive(monster):
                 continue
 
@@ -557,16 +447,12 @@ class ShockwaveEffect(DictCompatible):
                 rect.x += int(push_dir.x * self.knockback)
                 rect.y += int(push_dir.y * self.knockback)
                 rect.clamp_ip(screen_rect)
->>>>>>> Tuyên
 
         return True
 
     def draw(self, screen, show_hitbox=False):
         thickness = max(1, int(10 * (1 - self.current_radius / self.max_radius)))
-<<<<<<< HEAD
-=======
 
->>>>>>> Tuyên
         pygame.draw.circle(
             screen,
             BROWN,
@@ -625,10 +511,7 @@ class SwordSlashEffect:
             (int(self.end.x), int(self.end.y)),
             self.width,
         )
-<<<<<<< HEAD
-=======
 
->>>>>>> Tuyên
         pygame.draw.circle(screen, WHITE, (int(self.end.x), int(self.end.y)), 5)
 
         if show_hitbox:
@@ -660,10 +543,7 @@ class DashSlashEffect:
             (int(self.end.x), int(self.end.y)),
             self.width,
         )
-<<<<<<< HEAD
-=======
 
->>>>>>> Tuyên
         pygame.draw.line(
             screen,
             WHITE,
@@ -685,10 +565,7 @@ class FlagSwingEffect:
     timer: int = 12
     has_hit_enemy: bool = False
     polygon: list = field(default_factory=list)
-<<<<<<< HEAD
-=======
     tile_map: object | None = None
->>>>>>> Tuyên
 
     def update_timer(self):
         self.timer -= 1
@@ -698,27 +575,6 @@ class FlagSwingEffect:
         if direction.length() > 0:
             self.direction = pygame.Vector2(direction.x, direction.y)
 
-<<<<<<< HEAD
-    def angle(self):
-        progress = 1 - self.timer / self.duration
-        start_angle = -45 * self.side
-        end_angle = 45 * self.side
-        return start_angle + (end_angle - start_angle) * progress
-
-    def build_polygon(self, player):
-        d = pygame.Vector2(self.direction.x, self.direction.y)
-        if d.length() == 0:
-            d = pygame.Vector2(0, 1)
-        d = d.normalize()
-
-        center = player_center(player)
-        start_angle = -45 * self.side
-        current_angle = self.angle()
-
-        inner = 22
-        outer = 95
-        steps = 18
-=======
     def progress(self):
         if self.duration <= 0:
             return 1
@@ -776,7 +632,6 @@ class FlagSwingEffect:
 
         if abs(current_angle - start_angle) < 2:
             current_angle = start_angle + 2 * self.side
->>>>>>> Tuyên
 
         outer_points = []
         inner_points = []
@@ -784,11 +639,6 @@ class FlagSwingEffect:
         for i in range(steps + 1):
             t = i / steps
             angle = start_angle + (current_angle - start_angle) * t
-<<<<<<< HEAD
-            rotated = rotate(d, math.radians(angle))
-            outer_point = center + rotated * outer
-            inner_point = center + rotated * inner
-=======
             rotated = rotate(base, math.radians(angle))
 
             outer_point = self.clipped_point(
@@ -803,29 +653,18 @@ class FlagSwingEffect:
             else:
                 inner_point = center + rotated * inner
 
->>>>>>> Tuyên
             outer_points.append((int(outer_point.x), int(outer_point.y)))
             inner_points.append((int(inner_point.x), int(inner_point.y)))
 
         self.polygon = outer_points + inner_points[::-1]
         return self.polygon
 
-<<<<<<< HEAD
-    def update_hitbox(self, player, monsters, damage_monster, damage):
-        self.build_polygon(player)
-=======
     def update_hitbox(self, player, monsters, damage_monster, damage, tile_map=None):
         self.build_polygon(player, tile_map)
->>>>>>> Tuyên
 
         if self.has_hit_enemy:
             return
 
-<<<<<<< HEAD
-        for monster in monsters:
-            rect = entity_rect(monster)
-            if monster_alive(monster) and rect_hits_polygon(rect, self.polygon):
-=======
         if len(self.polygon) < 3:
             return
 
@@ -839,22 +678,16 @@ class FlagSwingEffect:
                 if line_blocked_by_wall(tile_map, start, monster_center):
                     continue
 
->>>>>>> Tuyên
                 damage_monster(monster, damage)
                 self.has_hit_enemy = True
                 break
 
     def draw_fan(self, screen, player):
         polygon = self.build_polygon(player)
-<<<<<<< HEAD
-        if len(polygon) < 3:
-            return
-=======
 
         if len(polygon) < 3:
             return
 
->>>>>>> Tuyên
         pygame.draw.polygon(screen, FLAG_DARK, polygon)
         pygame.draw.lines(screen, FLAG_LIGHT, True, polygon, 3)
 
@@ -863,12 +696,6 @@ class FlagSwingEffect:
             pygame.draw.lines(screen, WHITE, True, self.polygon, 3)
 
 
-<<<<<<< HEAD
-# =========================
-# WEAPON CLASSES
-# =========================
-=======
->>>>>>> Tuyên
 class BaseWeapon:
     def __init__(self, data):
         self.data = data
@@ -891,45 +718,28 @@ class BaseWeapon:
 
     @property
     def energy_cost(self):
-<<<<<<< HEAD
-        """Energy is ammo, so only ranged-style weapons spend it."""
-        if "energy_cost" in self.data:
-            return self.data["energy_cost"]
-        if self.weapon_type in ENERGY_AMMO_WEAPON_TYPES:
-            return DEFAULT_RANGED_ENERGY_COST
-=======
         if "energy_cost" in self.data:
             return self.data["energy_cost"]
 
         if self.weapon_type in ENERGY_AMMO_WEAPON_TYPES:
             return DEFAULT_RANGED_ENERGY_COST
 
->>>>>>> Tuyên
         return 0
 
     def try_spend_energy(self, context: WeaponUseContext) -> bool:
         cost = self.energy_cost
-<<<<<<< HEAD
-=======
 
->>>>>>> Tuyên
         if cost <= 0:
             return True
 
         spend_energy = getattr(context.player, "spend_energy", None)
-<<<<<<< HEAD
-=======
 
->>>>>>> Tuyên
         if callable(spend_energy):
             return bool(spend_energy(cost))
 
         if getattr(context.player, "energy", 0) < cost:
             return False
-<<<<<<< HEAD
-=======
 
->>>>>>> Tuyên
         context.player.energy -= cost
         return True
 
@@ -950,14 +760,6 @@ class SwordWeapon(BaseWeapon):
 
         d = context.direction
         start = player_center(context.player)
-<<<<<<< HEAD
-        end = start + d * self.data["range"]
-        width = self.data["size"]
-
-        for monster in context.monsters:
-            if monster_alive(monster) and rect_hits_line(entity_rect(monster), start, end, width):
-                context.damage_monster(monster, self.data["damage"])
-=======
 
         raw_end = start + d * self.data["range"]
         end = clip_line_end_for_melee_visual(context.tile_map, start, raw_end)
@@ -965,7 +767,6 @@ class SwordWeapon(BaseWeapon):
         width = self.data["size"]
 
         damage_monsters_on_line(context, start, end, width, self.data["damage"])
->>>>>>> Tuyên
 
         system.sword_slash = SwordSlashEffect(start=start, end=end, width=width, timer=8)
         system.attack_cooldown_timer = self.cooldown
@@ -974,10 +775,7 @@ class SwordWeapon(BaseWeapon):
         rect = entity_rect(player)
         d = normalized_direction(player_direction)
         end = (rect.centerx + int(d.x * 35), rect.centery + int(d.y * 35))
-<<<<<<< HEAD
-=======
 
->>>>>>> Tuyên
         pygame.draw.line(screen, YELLOW, rect.center, end, 5)
 
 
@@ -986,15 +784,6 @@ class GunWeapon(BaseWeapon):
         if system.shoot_timer <= 0:
             if not self.try_spend_energy(context):
                 return
-<<<<<<< HEAD
-            system.bullets.append(BulletProjectile.create(
-                context.player,
-                context.player_direction,
-                damage=self.data["damage"],
-                size=self.data["size"],
-                speed=system.bullet_speed,
-            ))
-=======
 
             system.bullets.append(
                 BulletProjectile.create(
@@ -1006,7 +795,6 @@ class GunWeapon(BaseWeapon):
                 )
             )
 
->>>>>>> Tuyên
             system.shoot_timer = self.cooldown
 
     def draw_icon(self, system, screen, player, player_direction):
@@ -1020,19 +808,6 @@ class FlagWeapon(BaseWeapon):
             return
 
         system.flag_side *= -1
-<<<<<<< HEAD
-        system.flag_swing = FlagSwingEffect(
-            direction=pygame.Vector2(context.player_direction.x, context.player_direction.y),
-            side=system.flag_side,
-            duration=system.flag_duration,
-            timer=system.flag_duration,
-        )
-        system.flag_swing.build_polygon(context.player)
-        system.attack_cooldown_timer = self.cooldown
-
-    def draw_icon(self, system, screen, player, player_direction):
-        draw_flag(screen, player, player_direction)
-=======
 
         system.flag_swing = FlagSwingEffect(
             direction=pygame.Vector2(
@@ -1050,7 +825,6 @@ class FlagWeapon(BaseWeapon):
 
     def draw_icon(self, system, screen, player, player_direction):
         draw_flag(screen, player, player_direction, system)
->>>>>>> Tuyên
 
 
 class SpearWeapon(BaseWeapon):
@@ -1058,15 +832,11 @@ class SpearWeapon(BaseWeapon):
         if system.attack_cooldown_timer <= 0:
             if not self.try_spend_energy(context):
                 return
-<<<<<<< HEAD
-            system.spears.append(SpearProjectile.create(context.player, context.player_direction, self.data))
-=======
 
             system.spears.append(
                 SpearProjectile.create(context.player, context.player_direction, self.data)
             )
 
->>>>>>> Tuyên
             system.attack_cooldown_timer = self.cooldown
 
     def draw_icon(self, system, screen, player, player_direction):
@@ -1074,8 +844,6 @@ class SpearWeapon(BaseWeapon):
 
 
 class DualBladesWeapon(BaseWeapon):
-<<<<<<< HEAD
-=======
     def _move_player_step(self, player, dx, dy, screen_rect, tile_map):
         player_rect = entity_rect(player)
 
@@ -1100,36 +868,10 @@ class DualBladesWeapon(BaseWeapon):
 
         return before.distance_to(after) > 0.1
 
->>>>>>> Tuyên
     def use(self, system, context):
         if system.attack_cooldown_timer > 0:
             return
 
-<<<<<<< HEAD
-        player_rect = context.player_rect
-        d = context.direction
-        start = pygame.Vector2(player_rect.centerx, player_rect.centery)
-        target_pos = start + d * self.data["dash_distance"]
-        end = find_walkable_dash_end(
-            player_rect,
-            start,
-            target_pos,
-            context.screen_rect,
-            context.tile_map,
-        )
-
-        player_rect.center = (int(end.x), int(end.y))
-        player_rect.clamp_ip(context.screen_rect)
-        end = pygame.Vector2(player_rect.centerx, player_rect.centery)
-        sync_player_tile_position_from_rect(context.player, context.tile_map)
-
-        width = self.data["slash_width"]
-        for monster in context.monsters:
-            if monster_alive(monster) and rect_hits_line(entity_rect(monster), start, end, width):
-                context.damage_monster(monster, self.data["damage"])
-
-        system.dash_slash = DashSlashEffect(start=start, end=end, width=width, timer=system.dash_slash_duration)
-=======
         player = context.player
         player_rect = context.player_rect
         d = context.direction
@@ -1190,7 +932,6 @@ class DualBladesWeapon(BaseWeapon):
             timer=system.dash_slash_duration,
         )
 
->>>>>>> Tuyên
         system.attack_cooldown_timer = self.cooldown
 
     def draw_icon(self, system, screen, player, player_direction):
@@ -1202,24 +943,17 @@ class BoomerangWeapon(BaseWeapon):
         if system.attack_cooldown_timer <= 0:
             if not self.try_spend_energy(context):
                 return
-<<<<<<< HEAD
-            system.boomerangs.append(BoomerangProjectile.create(context.player, context.player_direction, self.data))
-=======
 
             system.boomerangs.append(
                 BoomerangProjectile.create(context.player, context.player_direction, self.data)
             )
 
->>>>>>> Tuyên
             system.attack_cooldown_timer = self.cooldown
 
     def draw_icon(self, system, screen, player, player_direction):
         rect = entity_rect(player)
         d = normalized_direction(player_direction)
-<<<<<<< HEAD
-=======
 
->>>>>>> Tuyên
         pygame.draw.circle(
             screen,
             PURPLE,
@@ -1239,20 +973,11 @@ class EarthshakerWeapon(BaseWeapon):
         rect = entity_rect(player)
         d = normalized_direction(player_direction)
         head_center = (rect.centerx + int(d.x * 25), rect.centery + int(d.y * 25))
-<<<<<<< HEAD
-=======
 
->>>>>>> Tuyên
         pygame.draw.line(screen, BROWN, rect.center, head_center, 4)
         pygame.draw.rect(screen, GRAY, (head_center[0] - 10, head_center[1] - 10, 20, 20))
 
 
-<<<<<<< HEAD
-# =========================
-# WEAPON SYSTEM
-# =========================
-=======
->>>>>>> Tuyên
 class WeaponSystem:
     def __init__(self):
         self.weapon_objects = [self._make_weapon(data) for data in WEAPON_DATA]
@@ -1290,22 +1015,6 @@ class WeaponSystem:
 
     def _make_weapon(self, data):
         name = data["name"]
-<<<<<<< HEAD
-        if name == "Sword":
-            return SwordWeapon(data)
-        if name == "Gun":
-            return GunWeapon(data)
-        if name == "Flag":
-            return FlagWeapon(data)
-        if name == "Spear":
-            return SpearWeapon(data)
-        if name == "Dual Blades":
-            return DualBladesWeapon(data)
-        if name == "Boomerang":
-            return BoomerangWeapon(data)
-        if name == "Earthshaker":
-            return EarthshakerWeapon(data)
-=======
 
         if name == "Sword":
             return SwordWeapon(data)
@@ -1328,7 +1037,6 @@ class WeaponSystem:
         if name == "Earthshaker":
             return EarthshakerWeapon(data)
 
->>>>>>> Tuyên
         return BaseWeapon(data)
 
     @property
@@ -1341,10 +1049,7 @@ class WeaponSystem:
     def equip(self, index):
         if not self.weapon_objects:
             return
-<<<<<<< HEAD
-=======
 
->>>>>>> Tuyên
         self.current_weapon = index % len(self.weapon_objects)
         self.selected_weapon = self.current_weapon
 
@@ -1364,10 +1069,7 @@ class WeaponSystem:
             height=height,
             tile_map=tile_map,
         )
-<<<<<<< HEAD
-=======
 
->>>>>>> Tuyên
         self.current.use(self, context)
 
     def update(self, player, player_direction, monsters, damage_monster, screen_rect, tile_map=None):
@@ -1380,14 +1082,6 @@ class WeaponSystem:
             self.dash_slash = None
 
         if self.flag_swing is not None:
-<<<<<<< HEAD
-            # Preserve the original timing: flag_timer is decremented before
-            # the hitbox is rebuilt and tested.
-            if not self.flag_swing.update_timer():
-                self.flag_swing = None
-            elif self.current.name == "Flag":
-                self.flag_swing.update_hitbox(player, monsters, damage_monster, self.current.data["damage"])
-=======
             if not self.flag_swing.update_timer():
                 self.flag_swing = None
             elif self.current.name == "Flag":
@@ -1399,7 +1093,6 @@ class WeaponSystem:
                     tile_map,
                 )
 
->>>>>>> Tuyên
                 self.flag_attack_direction = pygame.Vector2(
                     self.flag_swing.direction.x,
                     self.flag_swing.direction.y,
@@ -1415,44 +1108,27 @@ class WeaponSystem:
             self.spear_splash = None
 
         self.bullets = [
-<<<<<<< HEAD
-            bullet for bullet in self.bullets
-=======
             bullet
             for bullet in self.bullets
->>>>>>> Tuyên
             if bullet.update(monsters, damage_monster, screen_rect, tile_map)
         ]
 
         self.spears = [
-<<<<<<< HEAD
-            spear for spear in self.spears
-=======
             spear
             for spear in self.spears
->>>>>>> Tuyên
             if spear.update(self, monsters, damage_monster, screen_rect, tile_map)
         ]
 
         self.boomerangs = [
-<<<<<<< HEAD
-            b for b in self.boomerangs
-=======
             b
             for b in self.boomerangs
->>>>>>> Tuyên
             if b.update(player, monsters, damage_monster, screen_rect, tile_map)
         ]
 
         self.shockwaves = [
-<<<<<<< HEAD
-            wave for wave in self.shockwaves
-            if wave.update(monsters, damage_monster, screen_rect)
-=======
             wave
             for wave in self.shockwaves
             if wave.update(monsters, damage_monster, screen_rect, tile_map)
->>>>>>> Tuyên
         ]
 
     def draw_weapon_icon(self, screen, player, player_direction):
@@ -1510,18 +1186,12 @@ class WeaponSystem:
                 pygame.draw.rect(screen, (65, 65, 65), rect)
 
             text = w["name"]
-<<<<<<< HEAD
-=======
 
->>>>>>> Tuyên
             if i == self.current_weapon:
                 text += " [EQUIPPED]"
 
             name_text = font.render(text, True, w["color"])
-<<<<<<< HEAD
-=======
 
->>>>>>> Tuyên
             info_text = small_font.render(
                 "Type: " + w["type"] + " | Damage: " + get_weapon_damage_text(w),
                 True,
@@ -1536,10 +1206,4 @@ class WeaponSystem:
             self.flag_swing.draw_fan(screen, player)
 
     def projectile_count(self):
-<<<<<<< HEAD
         return len(self.bullets) + len(self.spears) + len(self.boomerangs) + len(self.shockwaves)
-
-
-=======
-        return len(self.bullets) + len(self.spears) + len(self.boomerangs) + len(self.shockwaves)
->>>>>>> Tuyên

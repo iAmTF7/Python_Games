@@ -36,11 +36,13 @@ class TileMap:
         self.config = config or MapConfig()
         self.generator = generator or MapGenerator(self.config)
         self.level = level
+
         self.grid: list[list[int]] = []
         self.rooms: list[pygame.Rect] = []
         self.start_pos: tuple[int, int] = (0, 0)
         self.exit_pos: tuple[int, int] = (0, 0)
         self.exit_open: bool = True
+
         self.load_level(level)
 
     @property
@@ -62,6 +64,7 @@ class TileMap:
     def load_level(self, level: int) -> MapData:
         self.level = level
         data = self.generator.generate(level)
+
         self.grid = data.grid
         self.rooms = data.rooms
         self.start_pos = data.start_pos
@@ -124,11 +127,13 @@ class TileMap:
                     continue
 
                 clear = True
+
                 for cy in range(ty - clearance, ty + clearance + 1):
                     for cx in range(tx - clearance, tx + clearance + 1):
                         if not self.is_walkable_tile(cx, cy, include_exit=include_exit):
                             clear = False
                             break
+
                     if not clear:
                         break
 
@@ -327,6 +332,14 @@ class TileMap:
         dy: float,
         screen_rect: pygame.Rect | None = None,
     ) -> None:
+        """
+        Pixel-space rect movement.
+
+        Đây là fix chính cho lỗi kẹt tường:
+        - Di chuyển X và Y riêng.
+        - Nếu đụng tường ở trục nào thì rollback trục đó.
+        - Player vẫn trượt được dọc theo tường.
+        """
         if not hasattr(player, "rect"):
             return
 
@@ -378,6 +391,7 @@ class TileMap:
     def maybe_advance_level(self, px: float, py: float) -> bool:
         if not self.reached_exit(px, py):
             return False
+
         self.load_level(self.level + 1)
         return True
 
@@ -385,7 +399,11 @@ class TileMap:
         return self.tile_to_pixel_center(*self.start_pos)
 
     def tile_to_pixel_center(self, tx: float, ty: float) -> tuple[int, int]:
-
+        """
+        Fix lỗi cũ:
+        Cũ trả tx * tile_size, tức là góc tile.
+        Đúng phải là tâm tile.
+        """
         return (
             int((tx + 0.5) * self.tile_size),
             int((ty + 0.5) * self.tile_size),
