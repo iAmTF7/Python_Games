@@ -42,10 +42,8 @@ def update_flag_hitbox(player, monsters, damage_monster):
     system.flag_swing.update_hitbox(player, monsters, damage_monster, system.current.data["damage"])
 
 
-def draw_flag_cloth(screen, px, py, direction, system=None):
-    if system is None:
-        system = _active_system()
-
+def draw_flag_cloth(screen, px, py, direction):
+    system = _active_system()
     d = normalized_direction(direction)
     side = pygame.Vector2(-d.y, d.x)
 
@@ -69,16 +67,12 @@ def draw_flag_cloth(screen, px, py, direction, system=None):
         bottom.append((int(cx + d.x * h), int(cy + d.y * h)))
 
     points = top + bottom[::-1]
-
-    if len(points) >= 3:
-        pygame.draw.polygon(screen, FLAG_RED, points)
-        pygame.draw.lines(screen, WHITE, True, points, 2)
+    pygame.draw.polygon(screen, FLAG_RED, points)
+    pygame.draw.lines(screen, WHITE, True, points, 2)
 
 
-def draw_flag(screen, player, player_direction, system=None):
-    if system is None:
-        system = _active_system()
-
+def draw_flag(screen, player, player_direction):
+    system = _active_system()
     rect = entity_rect(player)
 
     if system.flag_swing is not None:
@@ -95,7 +89,7 @@ def draw_flag(screen, player, player_direction, system=None):
 
     pygame.draw.line(screen, BROWN, rect.center, (int(end.x), int(end.y)), 6)
     pygame.draw.circle(screen, LIGHT_GRAY, (int(end.x), int(end.y)), 7)
-    draw_flag_cloth(screen, end.x, end.y, d, system)
+    draw_flag_cloth(screen, end.x, end.y, d)
 
 
 def draw_fan(screen, player):
@@ -134,12 +128,6 @@ def draw_spear_in_hand(screen, player, player_direction):
 def draw_flying_spear(screen, spear):
     d = spear["dir"]
     rect = spear["rect"]
-
-    if d.length() == 0:
-        d = pygame.Vector2(0, 1)
-    else:
-        d = d.normalize()
-
     center = pygame.Vector2(rect.centerx, rect.centery)
 
     start = center - d * 18
@@ -156,14 +144,15 @@ def draw_flying_spear(screen, spear):
     left = rotate(d, math.radians(150)) * 12
     right = rotate(d, math.radians(-150)) * 12
 
-    points = [
-        (int(end.x), int(end.y)),
-        (int(end.x + left.x), int(end.y + left.y)),
-        (int(end.x + right.x), int(end.y + right.y)),
-    ]
-
-    pygame.draw.polygon(screen, SPEAR_TIP, points)
-    pygame.draw.lines(screen, WHITE, True, points, 1)
+    pygame.draw.polygon(
+        screen,
+        SPEAR_TIP,
+        [
+            (int(end.x), int(end.y)),
+            (int(end.x + left.x), int(end.y + left.y)),
+            (int(end.x + right.x), int(end.y + right.y)),
+        ],
+    )
 
 
 def draw_dual_blades_in_hand(screen, player, player_direction):
@@ -197,3 +186,4 @@ def draw_dual_blades_in_hand(screen, player, player_direction):
 
     pygame.draw.circle(screen, WHITE, (int(long_start.x), int(long_start.y)), 4)
     pygame.draw.circle(screen, WHITE, (int(short_start.x), int(short_start.y)), 4)
+

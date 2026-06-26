@@ -8,14 +8,14 @@ from __future__ import annotations
 
 import pygame
 
-from game.settings import BACKGROUND_COLOR, FPS, SCREEN_HEIGHT, SCREEN_WIDTH
+from game.settings import BACKGROUND_COLOR, FPS, get_window_size
 from game.state import GameState
 
 
 class Game:
     def __init__(self) -> None:
         pygame.init()
-        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        self.screen = pygame.display.set_mode(get_window_size())
         pygame.display.set_caption("Pygame Baseline System")
         self.clock = pygame.time.Clock()
         self.state = GameState(debug=True)
