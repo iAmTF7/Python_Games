@@ -390,6 +390,7 @@ class IntegratedDebugGame:
         self.draw_monsters()
         self.draw_projectiles()
         self.weapon_system.draw_projectiles(self.screen, self.state.debug)
+        self.weapon_system.draw_fan(self.screen, self.player)
         self.weapon_system.draw_attacks(self.screen, self.state.debug)
         self.player.draw(self.screen, PLAYER_COLOR)
         self.weapon_system.draw_weapon_icon(self.screen, self.player, self.player.direction)

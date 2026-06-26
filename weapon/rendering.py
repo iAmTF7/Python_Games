@@ -42,8 +42,10 @@ def update_flag_hitbox(player, monsters, damage_monster):
     system.flag_swing.update_hitbox(player, monsters, damage_monster, system.current.data["damage"])
 
 
-def draw_flag_cloth(screen, px, py, direction):
-    system = _active_system()
+def draw_flag_cloth(screen, px, py, direction, system=None):
+    if system is None:
+        system = _active_system()
+
     d = normalized_direction(direction)
     side = pygame.Vector2(-d.y, d.x)
 
@@ -67,12 +69,16 @@ def draw_flag_cloth(screen, px, py, direction):
         bottom.append((int(cx + d.x * h), int(cy + d.y * h)))
 
     points = top + bottom[::-1]
-    pygame.draw.polygon(screen, FLAG_RED, points)
-    pygame.draw.lines(screen, WHITE, True, points, 2)
+
+    if len(points) >= 3:
+        pygame.draw.polygon(screen, FLAG_RED, points)
+        pygame.draw.lines(screen, WHITE, True, points, 2)
 
 
-def draw_flag(screen, player, player_direction):
-    system = _active_system()
+def draw_flag(screen, player, player_direction, system=None):
+    if system is None:
+        system = _active_system()
+
     rect = entity_rect(player)
 
     if system.flag_swing is not None:
@@ -89,7 +95,7 @@ def draw_flag(screen, player, player_direction):
 
     pygame.draw.line(screen, BROWN, rect.center, (int(end.x), int(end.y)), 6)
     pygame.draw.circle(screen, LIGHT_GRAY, (int(end.x), int(end.y)), 7)
-    draw_flag_cloth(screen, end.x, end.y, d)
+    draw_flag_cloth(screen, end.x, end.y, d, system)
 
 
 def draw_fan(screen, player):
