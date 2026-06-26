@@ -15,7 +15,7 @@ from typing import Tuple
 
 import pygame
 
-from ..Config.settings import Colors, Settings
+from .config import Colors, Settings
 
 
 class Entity:

@@ -1,6 +1,9 @@
-"""Object-oriented weapon module.
+"""Weapon package public API."""
 
-Import the legacy-compatible API from ``weapon.weapons``.
-"""
+from .constants import *
+from .legacy import *
+from .models import *
+from .physics import *
+from .rendering import *
 
-from .weapons import *
+__all__ = [name for name in globals() if not name.startswith("_")]

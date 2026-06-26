@@ -1,7 +1,9 @@
 """Level package public API."""
 
-from .level_up import LevelConfig, LevelSystem, LevelUpResult
-from .stats import (
+from .config import LevelConfig
+from .legacy import upgrade_armor, upgrade_damage, upgrade_energy, upgrade_hp, upgrade_speed
+from .progression import LevelSystem, LevelUpResult
+from .upgrades import (
     ArmorUpgrade,
     DamageUpgrade,
     EnergyUpgrade,
@@ -9,11 +11,6 @@ from .stats import (
     SpeedUpgrade,
     StatUpgrade,
     StatUpgradeSystem,
-    upgrade_armor,
-    upgrade_damage,
-    upgrade_energy,
-    upgrade_hp,
-    upgrade_speed,
 )
 
 __all__ = [

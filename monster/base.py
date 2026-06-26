@@ -12,8 +12,8 @@ from abc import ABC, abstractmethod
 import math
 import random
 
-from ..Entity.base import Entity
-from ..Config.settings import MonsterConfig, Settings
+from .entity import Entity
+from .config import MonsterConfig, Settings
 
 
 class Monster(Entity, ABC):
@@ -32,12 +32,17 @@ class Monster(Entity, ABC):
         size: int,
         screen_width: int = Settings.SCREEN_WIDTH,
         screen_height: int = Settings.SCREEN_HEIGHT,
+        detect_range: float | None = None,
     ):
         super().__init__(x, y, hp, speed, color, size, screen_width, screen_height)
         self._damage = damage
         self._attack_range = attack_range
         self._cooldown = cooldown
         self._current_cooldown = 0
+        # Tầm phát hiện player. Ngoài tầm này quái đứng yên hoàn toàn,
+        # không di chuyển và không idle-wander. None = giữ hành vi gốc
+        # (luôn đuổi theo player bất kể khoảng cách).
+        self._detect_range = detect_range
 
         # Idle-wander state. Preserves the original cooldown-in-range behavior.
         self._wander_target_x = x
@@ -51,6 +56,10 @@ class Monster(Entity, ABC):
     @property
     def attack_range(self) -> int:
         return self._attack_range
+
+    @property
+    def detect_range(self):
+        return self._detect_range
 
     @property
     def cooldown(self) -> int:
@@ -81,7 +90,11 @@ class Monster(Entity, ABC):
 
         dist = self.distance_to(target)
 
-        if dist <= self._attack_range:
+        if self._detect_range is not None and dist > self._detect_range:
+            # Player ngoài tầm phát hiện -> đứng yên hoàn toàn, không
+            # di chuyển, không idle-wander, không tấn công.
+            pass
+        elif dist <= self._attack_range:
             if self._current_cooldown <= 0:
                 self.attack(target, projectiles)
                 self._current_cooldown = self._cooldown

@@ -13,8 +13,8 @@ import math
 import pygame
 
 from .base import Monster
-from ..Combat.projectile import Projectile
-from ..Config.settings import Colors, MonsterConfig, Settings
+from .projectile import Projectile
+from .config import Colors, MonsterConfig, Settings
 
 
 class RangedMonster(Monster):
@@ -49,7 +49,8 @@ class RangedMonster(Monster):
             color=MonsterConfig.RANGED_COLOR,
             size=MonsterConfig.RANGED_SIZE,
             screen_width=screen_width,
-            screen_height=screen_height
+            screen_height=screen_height,
+            detect_range=MonsterConfig.RANGED_DETECT_RANGE,
         )
         # Hướng cầm súng (đơn vị vector), cập nhật mỗi khi di chuyển/bắn.
         self._facing_x = 0.0
@@ -63,6 +64,54 @@ class RangedMonster(Monster):
         if dist > 0:
             self._facing_x = dx / dist
             self._facing_y = dy / dist
+
+    def _can_see_target(self, target, tile_map) -> bool:
+        """Return True when no wall blocks this monster's sight line."""
+        if tile_map is None or not hasattr(tile_map, "has_line_of_sight"):
+            return True
+        return tile_map.has_line_of_sight(
+            (self._x, self._y),
+            (target.x, target.y),
+        )
+
+    def update(self, target, projectiles: list, tile_map=None):
+        """Update ranged AI with wall-aware detection and firing.
+
+        Distance still limits awareness, but the player must also be visible
+        through line-of-sight before this monster can chase, aim, or shoot.
+        """
+        if not self.is_alive():
+            return
+
+        old_x, old_y = self._x, self._y
+
+        if self._current_cooldown > 0:
+            self._current_cooldown -= 1
+
+        dist = self.distance_to(target)
+        in_detection_range = (
+            self._detect_range is None
+            or dist <= self._detect_range
+        )
+        target_visible = in_detection_range and self._can_see_target(target, tile_map)
+
+        if not target_visible:
+            # Player is too far away or hidden by a wall. Do not chase, idle,
+            # aim-update, or shoot: this prevents through-wall detection.
+            pass
+        else:
+            self._update_facing(target)
+            if dist <= self._attack_range:
+                if self._current_cooldown <= 0:
+                    self.attack(target, projectiles)
+                    self._current_cooldown = self._cooldown
+                else:
+                    self._idle_wander()
+            else:
+                self.move_towards(target)
+
+        if tile_map is not None:
+            self._keep_inside_walkable_map(tile_map, old_x, old_y)
 
     def move_towards(self, target):
         """

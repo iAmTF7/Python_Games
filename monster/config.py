@@ -39,9 +39,10 @@ class Settings:
     Đóng gói (Encapsulation): quản lý tập trung cấu hình.
     """
     # Kích thước màn hình mặc định
-    SCREEN_WIDTH = 800
-    SCREEN_HEIGHT = 600
+    SCREEN_WIDTH = 1280
+    SCREEN_HEIGHT = 720
     FPS = 60
+
 
     # Spawn
     SPAWN_MARGIN = 60               # Khoảng cách tối thiểu từ viền
@@ -50,8 +51,9 @@ class Settings:
     SPAWN_MAX_ATTEMPTS = 100             # Số lần thử tìm vị trí spawn
 
     # Base enemy
-    BASE_ENEMY_COUNT = 3            # Số quái cơ bản ở level 1
-    ENEMY_INCREASE_PER_LEVEL = 1    # Tăng thêm mỗi level (giảm từ 2 -> 1, đỡ dồn quá nhiều quái)
+    BASE_ENEMY_COUNT = 8            # Số quái cơ bản ở room đầu tiên
+    ENEMY_INCREASE_PER_LEVEL = 1    # Mỗi room tăng thêm n quái
+    MAX_ENEMY_COUNT = 18            # Giới hạn tối đa quái được spawn mỗi room
 
     # Va chạm giữa quái - "ô cứng" để quái không chồng/dính lên nhau
     MONSTER_COLLISION_PUSH = 0.5          # Mỗi quái nhận nửa độ lệch overlap (ổn định, không giật)
@@ -76,6 +78,7 @@ class MonsterConfig:
     MELEE_HP = 50
     MELEE_DAMAGE = 10
     MELEE_ATTACK_RANGE = 70         # Tầm kiếm (giống độ dài lưỡi kiếm player)
+    MELEE_DETECT_RANGE = 220        # Tầm phát hiện player - ngoài tầm này quái đứng yên
     MELEE_SPEED = 2.5
     MELEE_COOLDOWN = Settings.FPS    # 1 giây / lần chém (60 frame @ 60 FPS) - hồi chiêu
     MELEE_SIZE = 30
@@ -94,6 +97,7 @@ class MonsterConfig:
     RANGED_HP = 30
     RANGED_DAMAGE = 15
     RANGED_ATTACK_RANGE = 300
+    RANGED_DETECT_RANGE = 350   # Tầm phát hiện player - ngoài tầm này quái đứng yên
     RANGED_SPEED = 1.0
     RANGED_COOLDOWN = 90
     RANGED_SIZE = 30

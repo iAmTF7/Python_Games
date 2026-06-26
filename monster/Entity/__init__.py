@@ -1,7 +1,3 @@
-# Entity Sub-Package - Lớp thực thể cơ sở
-"""
-Chứa lớp Entity (base class) cho tất cả đối tượng trong game.
-Thể hiện tính Kế thừa (Inheritance) và Đóng gói (Encapsulation).
-"""
+from ..entity import Entity
 
-from .base import Entity
+__all__ = ["Entity"]

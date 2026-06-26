@@ -25,7 +25,7 @@ import random
 import pygame
 
 from .base import Monster
-from ..Config.settings import Colors, MonsterConfig, Settings
+from .config import Colors, MonsterConfig, Settings
 
 
 class MeleeMonster(Monster):
@@ -69,7 +69,8 @@ class MeleeMonster(Monster):
             color=MonsterConfig.MELEE_COLOR,
             size=MonsterConfig.MELEE_SIZE,
             screen_width=screen_width,
-            screen_height=screen_height
+            screen_height=screen_height,
+            detect_range=MonsterConfig.MELEE_DETECT_RANGE,
         )
         # Hướng quái đang nhìn/cầm kiếm (đơn vị vector). Mặc định nhìn xuống.
         self._facing_x = 0.0
@@ -116,14 +117,28 @@ class MeleeMonster(Monster):
 
         old_x, old_y = self._x, self._y
         dist = self.distance_to(target)
+        target_detected = (
+            self._detect_range is None
+            or dist <= self._detect_range
+        )
+
+        # Keep the visible attack direction responsive while the player is
+        # detected, not only when the monster first enters attack range.
+        # This makes the sword/telegraph track the player during chase,
+        # wind-up, and cooldown idle-wander.
+        if target_detected:
+            self._update_facing(target)
 
         if self._state == self.STATE_CHASING:
-            self._update_facing(target)
-            if dist <= self._attack_range:
-                # Vào tầm đánh -> dừng lại, "chốt" hướng nhìn về player VÀ
-                # random góc cung chém (90-180 độ, giống Soul Knight) tại
-                # thời điểm này. Không xoay theo trong lúc đang chém - player
-                # có thể né bằng cách lách ra sau lưng trong lúc wind-up.
+            if not target_detected:
+                # Player ngoài tầm phát hiện -> đứng yên hoàn toàn, chưa
+                # phát hiện player, không đuổi và không quay hướng.
+                pass
+            elif dist <= self._attack_range:
+                # Vào tầm đánh -> dừng lại và random góc cung chém
+                # (90-180 độ, giống Soul Knight). Hướng đánh tiếp tục được
+                # cập nhật mỗi frame trong lúc wind-up nếu player còn trong
+                # tầm phát hiện.
                 self._state = self.STATE_WINDUP
                 self._windup_timer = MonsterConfig.MELEE_WINDUP_FRAMES
                 self._slash_angle = random.uniform(
@@ -131,12 +146,12 @@ class MeleeMonster(Monster):
                     MonsterConfig.MELEE_SLASH_ANGLE_MAX
                 )
             else:
-                # Chưa vào tầm -> tiếp tục đuổi thẳng về phía player
+                # Đã phát hiện player, chưa vào tầm -> đuổi thẳng tới
                 self.move_towards(target)
 
         elif self._state == self.STATE_WINDUP:
-            # Dừng khựng, không di chuyển, không xoay hướng, chờ hết
-            # wind-up rồi vung kiếm theo hướng đã chốt.
+            # Dừng khựng, không di chuyển; hướng đánh vẫn bám theo player
+            # nhờ _update_facing() ở đầu update() khi player còn được phát hiện.
             self._windup_timer -= 1
             if self._windup_timer <= 0:
                 self.attack(target, projectiles)
@@ -144,7 +159,8 @@ class MeleeMonster(Monster):
                 self._state = self.STATE_COOLDOWN
 
         elif self._state == self.STATE_COOLDOWN:
-            # Hồi chiêu - đứng yên (idle wander nhẹ) rồi tiếp tục đuổi
+            # Hồi chiêu - đứng yên (idle wander nhẹ) rồi tiếp tục đuổi.
+            # Facing vẫn cập nhật mỗi frame khi player còn trong detect range.
             if self._current_cooldown > 0:
                 self._current_cooldown -= 1
                 self._idle_wander()
@@ -163,10 +179,9 @@ class MeleeMonster(Monster):
         Đa hình (Polymorphism): Vung kiếm theo cung 90-180 độ (random).
 
         Được gọi đúng 1 lần khi wind-up kết thúc. Gây sát thương nếu
-        player nằm trong tầm kiếm VÀ trong cung chém (mở theo hướng
-        quái đã chốt từ lúc bắt đầu wind-up - KHÔNG cập nhật lại facing
-        ở đây, để player có cơ hội né bằng cách di chuyển ra ngoài cung
-        chém trong lúc quái đang wind-up).
+        player nằm trong tầm kiếm VÀ trong cung chém theo hướng facing
+        hiện tại. Facing được cập nhật mỗi frame trong update() khi player
+        còn nằm trong detect range.
 
         Args:
             target: Mục tiêu tấn công

@@ -8,7 +8,7 @@ from typing import Dict, List, Tuple, Type
 
 import pygame
 
-from ..Config.settings import MonsterConfig, Settings
+from .config import MonsterConfig, Settings
 
 
 class MonsterSpawner:
@@ -36,8 +36,8 @@ class MonsterSpawner:
 
     def register_defaults(self):
         """Register the built-in melee and ranged monster classes."""
-        from ..Monster.melee import MeleeMonster
-        from ..Monster.ranged import RangedMonster
+        from .melee import MeleeMonster
+        from .ranged import RangedMonster
 
         self.register_monster_class("melee", MeleeMonster)
         self.register_monster_class("ranged", RangedMonster)
@@ -84,7 +84,9 @@ class MonsterSpawner:
         return list(self._monster_classes.keys())
 
     def get_enemy_count(self, level: int) -> int:
-        return Settings.BASE_ENEMY_COUNT + (level - 1) * Settings.ENEMY_INCREASE_PER_LEVEL
+        level = max(1, int(level))
+        count = Settings.BASE_ENEMY_COUNT + (level - 1) * Settings.ENEMY_INCREASE_PER_LEVEL
+        return min(Settings.MAX_ENEMY_COUNT, count)
 
     def _spawn_rect(self, x: float, y: float) -> pygame.Rect:
         size = max(MonsterConfig.MELEE_SIZE, MonsterConfig.RANGED_SIZE)

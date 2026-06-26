@@ -1,0 +1,66 @@
+{
+  // Quick terminal tasks. Use Terminal > Run Task...
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Game: Run Integrated Debugger",
+      "type": "shell",
+      "command": "python",
+      "args": [
+        "-m",
+        "game.main"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PYTHONPATH": "${workspaceFolder}"
+        }
+      },
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Tests: Run All",
+      "type": "shell",
+      "command": "python",
+      "args": [
+        "-m",
+        "pytest",
+        "tests",
+        "-q"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PYTHONPATH": "${workspaceFolder}",
+          "SDL_VIDEODRIVER": "dummy"
+        }
+      },
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Tests: Run Current File",
+      "type": "shell",
+      "command": "python",
+      "args": [
+        "-m",
+        "pytest",
+        "${file}",
+        "-q"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PYTHONPATH": "${workspaceFolder}",
+          "SDL_VIDEODRIVER": "dummy"
+        }
+      },
+      "group": "test",
+      "problemMatcher": []
+    }
+  ]
+}
