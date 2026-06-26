@@ -9,6 +9,10 @@ import pygame
 from .constants import *
 from .physics import entity_rect, normalized_direction, rotate
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> Tuyên
 # =========================
 # DRAW HELPERS
 # =========================
@@ -20,20 +24,35 @@ def _active_system():
 
 def get_flag_angle():
     system = _active_system()
+<<<<<<< HEAD
     if system.flag_swing is None:
         return 0
+=======
+
+    if system.flag_swing is None:
+        return 0
+
+>>>>>>> Tuyên
     return system.flag_swing.angle()
 
 
 def build_flag_attack_polygon(player):
     system = _active_system()
+<<<<<<< HEAD
     if system.flag_swing is None:
         return []
+=======
+
+    if system.flag_swing is None:
+        return []
+
+>>>>>>> Tuyên
     return system.flag_swing.build_polygon(player)
 
 
 def update_flag_hitbox(player, monsters, damage_monster):
     system = _active_system()
+<<<<<<< HEAD
     if system.flag_swing is None:
         system.flag_attack_direction = pygame.Vector2(0, 1)
         return
@@ -44,6 +63,28 @@ def update_flag_hitbox(player, monsters, damage_monster):
 
 def draw_flag_cloth(screen, px, py, direction):
     system = _active_system()
+=======
+
+    if system.flag_swing is None:
+        system.flag_attack_direction = pygame.Vector2(0, 1)
+        return
+
+    if system.current.name != "Flag":
+        return
+
+    system.flag_swing.update_hitbox(
+        player,
+        monsters,
+        damage_monster,
+        system.current.data["damage"],
+    )
+
+
+def draw_flag_cloth(screen, px, py, direction, system=None):
+    if system is None:
+        system = _active_system()
+
+>>>>>>> Tuyên
     d = normalized_direction(direction)
     side = pygame.Vector2(-d.y, d.x)
 
@@ -67,6 +108,7 @@ def draw_flag_cloth(screen, px, py, direction):
         bottom.append((int(cx + d.x * h), int(cy + d.y * h)))
 
     points = top + bottom[::-1]
+<<<<<<< HEAD
     pygame.draw.polygon(screen, FLAG_RED, points)
     pygame.draw.lines(screen, WHITE, True, points, 2)
 
@@ -79,6 +121,30 @@ def draw_flag(screen, player, player_direction):
         d = pygame.Vector2(system.flag_swing.direction.x, system.flag_swing.direction.y)
     else:
         d = pygame.Vector2(player_direction.x, player_direction.y)
+=======
+
+    if len(points) >= 3:
+        pygame.draw.polygon(screen, FLAG_RED, points)
+        pygame.draw.lines(screen, WHITE, True, points, 2)
+
+
+def draw_flag(screen, player, player_direction, system=None):
+    if system is None:
+        system = _active_system()
+
+    rect = entity_rect(player)
+
+    if system.flag_swing is not None:
+        d = pygame.Vector2(
+            system.flag_swing.direction.x,
+            system.flag_swing.direction.y,
+        )
+    else:
+        d = pygame.Vector2(
+            player_direction.x,
+            player_direction.y,
+        )
+>>>>>>> Tuyên
 
     d = normalized_direction(d)
 
@@ -87,9 +153,28 @@ def draw_flag(screen, player, player_direction):
 
     end = pygame.Vector2(rect.centerx, rect.centery) + d * 52
 
+<<<<<<< HEAD
     pygame.draw.line(screen, BROWN, rect.center, (int(end.x), int(end.y)), 6)
     pygame.draw.circle(screen, LIGHT_GRAY, (int(end.x), int(end.y)), 7)
     draw_flag_cloth(screen, end.x, end.y, d)
+=======
+    pygame.draw.line(
+        screen,
+        BROWN,
+        rect.center,
+        (int(end.x), int(end.y)),
+        6,
+    )
+
+    pygame.draw.circle(
+        screen,
+        LIGHT_GRAY,
+        (int(end.x), int(end.y)),
+        7,
+    )
+
+    draw_flag_cloth(screen, end.x, end.y, d, system)
+>>>>>>> Tuyên
 
 
 def draw_fan(screen, player):
@@ -128,6 +213,15 @@ def draw_spear_in_hand(screen, player, player_direction):
 def draw_flying_spear(screen, spear):
     d = spear["dir"]
     rect = spear["rect"]
+<<<<<<< HEAD
+=======
+
+    if d.length() == 0:
+        d = pygame.Vector2(0, 1)
+    else:
+        d = d.normalize()
+
+>>>>>>> Tuyên
     center = pygame.Vector2(rect.centerx, rect.centery)
 
     start = center - d * 18
@@ -144,6 +238,7 @@ def draw_flying_spear(screen, spear):
     left = rotate(d, math.radians(150)) * 12
     right = rotate(d, math.radians(-150)) * 12
 
+<<<<<<< HEAD
     pygame.draw.polygon(
         screen,
         SPEAR_TIP,
@@ -153,6 +248,16 @@ def draw_flying_spear(screen, spear):
             (int(end.x + right.x), int(end.y + right.y)),
         ],
     )
+=======
+    points = [
+        (int(end.x), int(end.y)),
+        (int(end.x + left.x), int(end.y + left.y)),
+        (int(end.x + right.x), int(end.y + right.y)),
+    ]
+
+    pygame.draw.polygon(screen, SPEAR_TIP, points)
+    pygame.draw.lines(screen, WHITE, True, points, 1)
+>>>>>>> Tuyên
 
 
 def draw_dual_blades_in_hand(screen, player, player_direction):
@@ -184,6 +289,22 @@ def draw_dual_blades_in_hand(screen, player, player_direction):
         5,
     )
 
+<<<<<<< HEAD
     pygame.draw.circle(screen, WHITE, (int(long_start.x), int(long_start.y)), 4)
     pygame.draw.circle(screen, WHITE, (int(short_start.x), int(short_start.y)), 4)
 
+=======
+    pygame.draw.circle(
+        screen,
+        WHITE,
+        (int(long_start.x), int(long_start.y)),
+        4,
+    )
+
+    pygame.draw.circle(
+        screen,
+        WHITE,
+        (int(short_start.x), int(short_start.y)),
+        4,
+    )
+>>>>>>> Tuyên
