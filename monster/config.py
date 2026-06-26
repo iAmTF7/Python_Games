@@ -37,11 +37,12 @@ class Settings:
     """
     Lớp chứa các thiết lập chung của game.
     Đóng gói (Encapsulation): quản lý tập trung cấu hình.
-    
-    Size-related values are mirrored from ``game.settings`` so monster
-    spawning/projectile bounds stay synced with the actual playable map.
     """
-    from game.settings import FPS, MAP_HEIGHT as SCREEN_HEIGHT, MAP_WIDTH as SCREEN_WIDTH
+    # Kích thước màn hình mặc định
+    SCREEN_WIDTH = 1280
+    SCREEN_HEIGHT = 720
+    FPS = 60
+
 
     # Spawn
     SPAWN_MARGIN = 60               # Khoảng cách tối thiểu từ viền

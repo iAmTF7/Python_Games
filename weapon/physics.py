@@ -222,7 +222,103 @@ def projectile_blocked_by_wall(tile_map, projectile_rect, previous_center=None):
             return True
 
     return False
+def line_blocked_by_wall(tile_map, start, end, step=4):
+    if tile_map is None:
+        return False
 
+    start = pygame.Vector2(start)
+    end = pygame.Vector2(end)
+
+    direction = end - start
+    distance = direction.length()
+
+    if distance <= 0:
+        return False
+
+    is_walkable = getattr(tile_map, "is_pixel_rect_walkable", None)
+
+    if callable(is_walkable):
+        direction = direction.normalize()
+        steps = max(1, int(distance // step))
+
+        for i in range(steps + 1):
+            point = start + direction * step * i
+
+            test_rect = pygame.Rect(
+                int(point.x) - 5,
+                int(point.y) - 5,
+                10,
+                10,
+            )
+
+            if not is_walkable(test_rect, include_exit=True):
+                return True
+
+        return False
+
+    iter_wall_rects = getattr(tile_map, "iter_wall_rects_between", None)
+
+    if callable(iter_wall_rects):
+        line_start = (int(start.x), int(start.y))
+        line_end = (int(end.x), int(end.y))
+
+        for wall_rect in iter_wall_rects(line_start, line_end):
+            if wall_rect.clipline(line_start, line_end):
+                return True
+
+    return False
+
+def clipped_line_end_by_wall(tile_map, start, end, step=4):
+    if tile_map is None:
+        return end
+
+    start = pygame.Vector2(start)
+    end = pygame.Vector2(end)
+
+    direction = end - start
+    distance = direction.length()
+
+    if distance <= 0:
+        return end
+
+    direction = direction.normalize()
+    last_safe = pygame.Vector2(start.x, start.y)
+
+    is_walkable = getattr(tile_map, "is_pixel_rect_walkable", None)
+
+    if callable(is_walkable):
+        steps = max(1, int(distance // step))
+
+        for i in range(1, steps + 1):
+            point = start + direction * step * i
+
+            test_rect = pygame.Rect(
+                int(point.x) - 3,
+                int(point.y) - 3,
+                6,
+                6,
+            )
+
+            if not is_walkable(test_rect, include_exit=True):
+                return last_safe
+
+            last_safe = pygame.Vector2(point.x, point.y)
+
+        return end
+
+    iter_wall_rects = getattr(tile_map, "iter_wall_rects_between", None)
+
+    if callable(iter_wall_rects):
+        line_start = (int(start.x), int(start.y))
+        line_end = (int(end.x), int(end.y))
+
+        for wall_rect in iter_wall_rects(line_start, line_end):
+            clipped = wall_rect.clipline(line_start, line_end)
+            if clipped:
+                hit_point = pygame.Vector2(clipped[0])
+                return start + direction * max(0, start.distance_to(hit_point) - 4)
+
+    return end
 
 def _tile_size_for(tile_map, default=32):
     return int(getattr(tile_map, "tile_size", default) or default)

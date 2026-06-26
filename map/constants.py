@@ -1,14 +1,8 @@
-"""Map constants.
+"""Map constants."""
 
-The size-related constants are compatibility aliases that point back to
-``game.settings``. Change resolution/layout in ``game/settings.py`` only.
-"""
-
-from game.settings import MAP_COLUMNS, MAP_ROWS, MAP_WIDTH, MAP_HEIGHT, TILE_SIZE
-
-TILE = TILE_SIZE
-MAP_W, MAP_H = MAP_COLUMNS, MAP_ROWS
-SCREEN_W, SCREEN_H = MAP_WIDTH, MAP_HEIGHT
+TILE = 32
+MAP_W, MAP_H = 36, 24
+SCREEN_W, SCREEN_H = MAP_W * TILE, MAP_H * TILE
 
 FLOOR = 0
 WALL = 1
