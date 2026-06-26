@@ -18,6 +18,7 @@ import pygame
 from game.state import GameState
 from game.hud import GameHUD
 from game.high_scores import HighScoreTable
+from game.settings import FPS, HUD_WIDTH, get_window_size
 from item import DropTable, Item, ItemPickupSystem
 from level import LevelSystem, StatUpgradeSystem
 from map import MapSystem, TileMap
@@ -26,8 +27,6 @@ from player import Player
 from weapon import WeaponSystem
 
 
-HUD_WIDTH = 340
-FPS = 60
 PLAYER_COLOR = (0, 200, 255)
 ITEM_COLORS = {
     "heal": (80, 230, 100),
@@ -63,7 +62,7 @@ class IntegratedDebugGame:
         self.tile_map = TileMap(level=0)
         map_width, map_height = self.tile_map.screen_size
         self.map_rect = pygame.Rect(0, 0, map_width, map_height)
-        self.screen = pygame.display.set_mode((map_width + HUD_WIDTH, map_height))
+        self.screen = pygame.display.set_mode(get_window_size())
         pygame.display.set_caption("Integrated Debug Runner")
         self.clock = pygame.time.Clock()
         self.font = pygame.font.Font(None, 24)
