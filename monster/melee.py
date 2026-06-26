@@ -92,6 +92,15 @@ class MeleeMonster(Monster):
             self._facing_x = dx / dist
             self._facing_y = dy / dist
 
+    def _can_see_target(self, target, tile_map) -> bool:
+        """Return True when no wall blocks this monster's sight line."""
+        if tile_map is None or not hasattr(tile_map, "has_line_of_sight"):
+            return True
+        return tile_map.has_line_of_sight(
+            (self._x, self._y),
+            (target.x, target.y),
+        )
+
     def move_towards(self, target):
         """Đa hình: vẫn di chuyển như Monster, nhưng luôn quay mặt về target."""
         self._update_facing(target)
@@ -117,22 +126,24 @@ class MeleeMonster(Monster):
 
         old_x, old_y = self._x, self._y
         dist = self.distance_to(target)
-        target_detected = (
+        in_detection_range = (
             self._detect_range is None
             or dist <= self._detect_range
         )
+        target_visible = in_detection_range and self._can_see_target(target, tile_map)
 
         # Keep the visible attack direction responsive while the player is
         # detected, not only when the monster first enters attack range.
         # This makes the sword/telegraph track the player during chase,
         # wind-up, and cooldown idle-wander.
-        if target_detected:
+        if target_visible:
             self._update_facing(target)
 
         if self._state == self.STATE_CHASING:
-            if not target_detected:
-                # Player ngoài tầm phát hiện -> đứng yên hoàn toàn, chưa
-                # phát hiện player, không đuổi và không quay hướng.
+            if not target_visible:
+                # Player ngoài tầm phát hiện hoặc bị tường che -> đứng yên
+                # hoàn toàn, chưa phát hiện player, không đuổi và không quay
+                # hướng. Điều này ngăn melee aggro xuyên tường.
                 pass
             elif dist <= self._attack_range:
                 # Vào tầm đánh -> dừng lại và random góc cung chém
@@ -150,20 +161,27 @@ class MeleeMonster(Monster):
                 self.move_towards(target)
 
         elif self._state == self.STATE_WINDUP:
-            # Dừng khựng, không di chuyển; hướng đánh vẫn bám theo player
-            # nhờ _update_facing() ở đầu update() khi player còn được phát hiện.
-            self._windup_timer -= 1
-            if self._windup_timer <= 0:
-                self.attack(target, projectiles)
-                self._current_cooldown = self._cooldown
-                self._state = self.STATE_COOLDOWN
+            if not target_visible:
+                # Nếu player rời line-of-sight trong lúc wind-up, hủy cú chém
+                # thay vì tiếp tục đánh xuyên tường.
+                self._state = self.STATE_CHASING
+                self._windup_timer = 0
+            else:
+                # Dừng khựng, không di chuyển; hướng đánh vẫn bám theo player
+                # nhờ _update_facing() ở đầu update() khi player còn được phát hiện.
+                self._windup_timer -= 1
+                if self._windup_timer <= 0:
+                    self.attack(target, projectiles)
+                    self._current_cooldown = self._cooldown
+                    self._state = self.STATE_COOLDOWN
 
         elif self._state == self.STATE_COOLDOWN:
             # Hồi chiêu - đứng yên (idle wander nhẹ) rồi tiếp tục đuổi.
             # Facing vẫn cập nhật mỗi frame khi player còn trong detect range.
             if self._current_cooldown > 0:
                 self._current_cooldown -= 1
-                self._idle_wander()
+                if target_visible:
+                    self._idle_wander()
             else:
                 self._state = self.STATE_CHASING
 
