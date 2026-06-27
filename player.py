@@ -287,19 +287,6 @@ class Player:
             direction = direction.normalize()
             self.direction = direction
 
-    def move_pixels(self, dx: float, dy: float) -> None:
-        if dx or dy:
-            self.set_direction(dx, dy)
-        self.rect.x += int(dx)
-        self.rect.y += int(dy)
-
-    def move_on_map(self, dx: float, dy: float, tile_map: Any, tile_size: int = 32) -> None:
-        """Move in tile-space using a TileMap-compatible collision object."""
-        if dx or dy:
-            self.set_direction(dx, dy)
-        self.map_x, self.map_y = tile_map.move_player(self.map_x, self.map_y, dx, dy)
-        self.sync_rect_from_tile_position(tile_size)
-
     # ------------------------------------------------------------------
     # Survival/stat helpers
     # ------------------------------------------------------------------
